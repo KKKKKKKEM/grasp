@@ -20,6 +20,9 @@ func NewPipeline() Pipeline {
 
 func (p *pipeline) Run(ctx context.Context, stage Stage) error {
 	for stage != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		next, err := stage.Do(ctx)
 		if err != nil {
 			return err
