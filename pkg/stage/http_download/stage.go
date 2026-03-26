@@ -21,6 +21,35 @@ func (s *DirectDownloadStage) Name() string {
 	return s.stageName
 }
 
+// applyFallback 将 fb 中的非零值填充到 task.Opts，header 仅补充不覆盖。
+func applyFallback(task *downloader.Task, fb *downloader.Opts, headers map[string]string) {
+	if task.Opts == nil {
+		task.Opts = &downloader.Opts{}
+	}
+	if task.Opts.Proxy == "" {
+		task.Opts.Proxy = fb.Proxy
+	}
+	if task.Opts.Timeout == 0 {
+		task.Opts.Timeout = fb.Timeout
+	}
+	if task.Opts.Retry == 0 {
+		task.Opts.Retry = fb.Retry
+	}
+	if task.Opts.RetryInterval == 0 {
+		task.Opts.RetryInterval = fb.RetryInterval
+	}
+	if headers != nil {
+		if task.Request.Header == nil {
+			task.Request.Header = make(map[string][]string)
+		}
+		for k, v := range headers {
+			if _, exists := task.Request.Header[k]; !exists {
+				task.Request.Header[k] = []string{v}
+			}
+		}
+	}
+}
+
 func (s *DirectDownloadStage) Run(rc *core.RunContext) core.StageResult {
 	// 优先从运行时输入读取 Task，其次使用构造时指定的默认 Task
 	var task *downloader.Task
@@ -44,34 +73,7 @@ func (s *DirectDownloadStage) Run(rc *core.RunContext) core.StageResult {
 	}
 
 	o := s.opts
-	if task.Opts == nil {
-		task.Opts = &downloader.Opts{}
-	}
-
-	if task.Proxy == "" && o.proxy != "" {
-		task.Proxy = o.proxy
-	}
-	if task.Timeout == 0 && o.timeout > 0 {
-		task.Timeout = o.timeout
-	}
-	if task.Retry == 0 && o.retry > 0 {
-		task.Retry = o.retry
-	}
-	if task.RetryInterval == 0 && o.retryInterval > 0 {
-		task.RetryInterval = o.retryInterval
-	}
-
-	// 合并 header
-	if o.headers != nil {
-		if task.Request.Header == nil {
-			task.Request.Header = make(map[string][]string)
-		}
-		for k, v := range o.headers {
-			if _, exists := task.Request.Header[k]; !exists {
-				task.Request.Header[k] = []string{v}
-			}
-		}
-	}
+	applyFallback(task, &o.fallback, o.headers)
 
 	if o.progressBar {
 		p := getSharedProgress()

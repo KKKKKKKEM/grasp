@@ -50,8 +50,35 @@ func (s *Stage) loadTask(rc *core.RunContext) (*extractors.Task, error) {
 		return nil, fmt.Errorf("task not found: neither in rc.Inputs[\"%s\"] nor in stage default", inputKey)
 	}
 
+	applyFallback(task, &s.opts.fallback)
 	return task, nil
 
+}
+
+// applyFallback 将 fb 中的非零值填充到 task.Opts，header 仅补充不覆盖。
+func applyFallback(task *extractors.Task, fb *extractors.Opts) {
+	if task.Opts == nil {
+		task.Opts = &extractors.Opts{}
+	}
+	if task.Opts.Proxy == "" {
+		task.Opts.Proxy = fb.Proxy
+	}
+	if task.Opts.Timeout == 0 {
+		task.Opts.Timeout = fb.Timeout
+	}
+	if task.Opts.Retry == 0 {
+		task.Opts.Retry = fb.Retry
+	}
+	if fb.Headers != nil {
+		if task.Opts.Headers == nil {
+			task.Opts.Headers = make(map[string]string)
+		}
+		for k, v := range fb.Headers {
+			if _, exists := task.Opts.Headers[k]; !exists {
+				task.Opts.Headers[k] = v
+			}
+		}
+	}
 }
 
 func (s *Stage) resolve(rawURL, forcedHint string) *extractors.Parser {
