@@ -53,9 +53,9 @@ func (s *Stage) loadTask(rc *core.RunContext) (*extractors.Task, error) {
 	return task, nil
 
 }
+
 func (s *Stage) resolve(rawURL, forcedHint string) *extractors.Parser {
 	if forcedHint != "" {
-		// 按 Extractor.Name() + Parser.Hint 精确指定
 		for _, ext := range s.extractors {
 			for _, p := range ext.Handlers() {
 				if p.Hint == forcedHint {
@@ -65,8 +65,11 @@ func (s *Stage) resolve(rawURL, forcedHint string) *extractors.Parser {
 		}
 		return nil // 指定了但找不到，返回 nil 报错
 	}
-	// 回到正则 match 逻辑
-	return s.match(rawURL)[0]
+	candidates := s.match(rawURL)
+	if len(candidates) == 0 {
+		return nil
+	}
+	return candidates[0]
 }
 
 func (s *Stage) resolveSelector(rc *core.RunContext, task *extractors.Task) extractors.Selector {
@@ -104,8 +107,13 @@ func (s *Stage) Run(rc *core.RunContext) core.StageResult {
 	for round := 0; round < maxRounds && len(queue) > 0; round++ {
 		var nextQueue []string
 
+		firstRoundForcedHint := ""
+		if round == 0 {
+			firstRoundForcedHint = task.ForcedParser
+		}
+
 		for _, rawURL := range queue {
-			parser := s.resolve(rawURL, task.ForcedParser)
+			parser := s.resolve(rawURL, firstRoundForcedHint)
 			if parser == nil {
 				return core.StageResult{Status: core.StageFailed, Err: fmt.Errorf("no parser matched URL: %s (forced: %s)", rawURL, task.ForcedParser)}
 			}
