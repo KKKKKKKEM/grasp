@@ -6,7 +6,7 @@ import "github.com/KKKKKKKEM/flowkit/core"
 // 这里简单示例，实现中可以集成到监控系统
 func MetricsMiddleware(metricsCollector map[string]map[string]float64) core.Middleware {
 	return func(next core.StageRunner) core.StageRunner {
-		return func(rc *core.RunContext, st core.Stage) core.StageResult {
+		return func(rc *core.Context, st core.Stage) core.StageResult {
 			stageName := st.Name()
 			if metricsCollector[stageName] == nil {
 				metricsCollector[stageName] = make(map[string]float64)

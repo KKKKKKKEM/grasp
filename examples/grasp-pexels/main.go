@@ -38,7 +38,7 @@ func main() {
 		},
 	}
 
-	rc := core.NewRunContext(context.Background(), "pexels-example")
+	rc := core.NewContext(context.Background(), "pexels-example")
 	rc.WithReporter(reporter)
 	rc.WithValue("task", task)
 

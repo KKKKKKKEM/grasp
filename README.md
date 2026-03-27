@@ -33,7 +33,7 @@ lp.Use(
     middleware.RetryMiddleware(&core.DefaultErrorPolicy{MaxRetries: 3}),
 )
 
-rc := core.NewRunContext(context.Background(), "trace-001")
+rc := core.NewContext(context.Background(), "trace-001")
 rc.WithValue("url", "https://example.com/data")
 
 report, err := lp.Run(rc, "fetch")
@@ -43,7 +43,7 @@ report, err := lp.Run(rc, "fetch")
 
 ```go
 router := cond.New("router",
-    cond.WithBranch(func(rc *core.RunContext) bool {
+    cond.WithBranch(func(rc *core.Context) bool {
         return rc.Values["status"] == "retry"
     }, "retry-stage"),
     cond.WithFallback("finalize"),
@@ -64,7 +64,7 @@ p := grasp.NewGraspPipeline(
     grasp.WithPlugin(grasp.CLISelectPlugin{}),
     grasp.WithProgress(grasp.NewMpbReporter()),
 )
-report, err := p.Invoke(context.Background(), task)
+report, err := p.Invoke(core.NewContext(context.Background(), uuid.NewString()), task)
 
 // Web 模式：REST + SSE 实时推送
 p.Serve(":8080") // 自动挂载 POST /run 和 POST /run/answer
@@ -74,7 +74,7 @@ p.Serve(":8080") // 自动挂载 POST /run 和 POST /run/answer
 
 ```
 flowkit/
-├── core/          # 核心抽象：Stage、RunContext、Middleware、App
+├── core/          # 核心抽象：Stage、Context、Middleware、App
 ├── pipeline/      # 执行引擎：Linear、FSM
 ├── middleware/    # 内置中间件：Logging、Retry、Timeout、Recovery、Metrics
 ├── stages/
@@ -98,13 +98,13 @@ flowkit/
 ```go
 type Stage interface {
     Name() string
-    Run(rc *RunContext) StageResult
+    Run(rc *Context) StageResult
 }
 ```
 
-每个 Stage 接收 `RunContext`（携带共享状态），返回 `StageResult`（含状态、输出、指标、下一跳）。
+每个 Stage 接收 `Context`（携带共享状态），返回 `StageResult`（含状态、输出、指标、下一跳）。
 
-### RunContext — 贯穿全局的上下文
+### Context — 贯穿全局的上下文
 
 实现 `context.Context` 接口，同时提供 `Values`（共享键值存储）、TraceID、进度上报器、交互挂起函数等业务能力。
 

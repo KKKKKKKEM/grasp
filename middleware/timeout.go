@@ -11,7 +11,7 @@ import (
 // 如果 stage 执行超过指定时间则返回失败
 func TimeoutMiddleware(timeout time.Duration) core.Middleware {
 	return func(next core.StageRunner) core.StageRunner {
-		return func(rc *core.RunContext, st core.Stage) core.StageResult {
+		return func(rc *core.Context, st core.Stage) core.StageResult {
 			// 创建带超时的子上下文
 			childRc, cancel := rc.WithCancel()
 			defer cancel()

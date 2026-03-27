@@ -1,7 +1,7 @@
 package core
 
 // StageRunner 是运行单个 stage 的函数签名
-type StageRunner func(rc *RunContext, st Stage) StageResult
+type StageRunner func(rc *Context, st Stage) StageResult
 
 // Middleware 是中间件函数，接收一个 StageRunner 返回一个包装过的 StageRunner
 type Middleware func(next StageRunner) StageRunner

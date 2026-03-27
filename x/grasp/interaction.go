@@ -19,7 +19,7 @@ type CLISelectPlugin struct{}
 
 func (CLISelectPlugin) Type() core.InteractionType { return InteractionTypeSelect }
 
-func (CLISelectPlugin) Interact(rc *core.RunContext, i core.Interaction) error {
+func (CLISelectPlugin) Interact(rc *core.Context, i core.Interaction) error {
 	items, err := payloadToItems(i.Payload)
 	if err != nil {
 		return fmt.Errorf("select interact: bad payload: %w", err)
@@ -65,7 +65,7 @@ type WebSelectPlugin struct{}
 
 func (WebSelectPlugin) Type() core.InteractionType { return InteractionTypeSelect }
 
-func (WebSelectPlugin) Interact(rc *core.RunContext, i core.Interaction) error {
+func (WebSelectPlugin) Interact(rc *core.Context, i core.Interaction) error {
 	suspend := rc.Suspend()
 	if suspend == nil {
 		return fmt.Errorf("WebSelectPlugin: no SuspendFunc in rc; use CLISelectPlugin for CLI mode")

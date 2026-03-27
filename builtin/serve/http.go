@@ -11,7 +11,7 @@ import (
 type HTTPConfig[Req, Resp any] struct {
 	App      core.App[Req, Resp]
 	BuildReq func(*gin.Context) (Req, error)
-	OnStart  func(*gin.Context, *core.RunContext, Req)
+	OnStart  func(*gin.Context, *core.Context, Req)
 }
 
 func HTTP[Req, Resp any](r gin.IRouter, path string, cfg HTTPConfig[Req, Resp]) {
@@ -27,7 +27,7 @@ func HTTP[Req, Resp any](r gin.IRouter, path string, cfg HTTPConfig[Req, Resp]) 
 			return
 		}
 
-		rc := core.NewRunContext(c.Request.Context(), uuid.NewString())
+		rc := core.NewContext(c.Request.Context(), uuid.NewString())
 		if cfg.OnStart != nil {
 			cfg.OnStart(c, rc, req)
 		}

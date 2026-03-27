@@ -2,8 +2,8 @@ package cond
 
 import "github.com/KKKKKKKEM/flowkit/core"
 
-// CondFunc 是条件判断函数，基于当前 RunContext 返回 true/false
-type CondFunc func(rc *core.RunContext) bool
+// CondFunc 是条件判断函数，基于当前 Context 返回 true/false
+type CondFunc func(rc *core.Context) bool
 
 // Branch 是一个条件分支：满足 When 时跳转到 Next
 type Branch struct {

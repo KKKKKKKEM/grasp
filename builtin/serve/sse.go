@@ -26,7 +26,7 @@ type SSEConfig[Req, Resp any] struct {
 	App      core.App[Req, Resp]
 	Store    *SSESessionStore
 	BuildReq func(*gin.Context) (Req, error)
-	OnStart  func(*SSESession, *core.RunContext, Req)
+	OnStart  func(*SSESession, *core.Context, Req)
 }
 
 func SSE[Req, Resp any](r gin.IRouter, path string, cfg SSEConfig[Req, Resp]) {
@@ -73,7 +73,7 @@ func SSE[Req, Resp any](r gin.IRouter, path string, cfg SSEConfig[Req, Resp]) {
 			}
 
 			go func() {
-				rc := core.NewRunContext(context.Background(), sessionID)
+				rc := core.NewContext(context.Background(), sessionID)
 				rc.WithSuspend(func(i core.Interaction) (core.InteractionResult, error) {
 					return sess.suspend(uuid.NewString(), i)
 				})

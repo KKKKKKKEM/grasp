@@ -21,15 +21,14 @@ func NewFSMPipeline() *FSMPipeline {
 	}
 }
 
-func (fp *FSMPipeline) Mode() Mode {
-	return ModeFSM
+func (fp *FSMPipeline) Mode() core.Mode {
+	return core.ModeFSM
 }
 
-func (fp *FSMPipeline) Register(stages ...core.Stage) Pipeline {
+func (fp *FSMPipeline) Register(stages ...core.Stage) {
 	for _, s := range stages {
 		fp.stages[s.Name()] = s
 	}
-	return fp
 }
 
 func (fp *FSMPipeline) Use(mw ...core.Middleware) *FSMPipeline {
@@ -45,9 +44,9 @@ func (fp *FSMPipeline) WithMaxVisits(max int) *FSMPipeline {
 	return fp
 }
 
-func (fp *FSMPipeline) Run(rc *core.RunContext, entry string) (*RunReport, error) {
-	report := &RunReport{
-		Mode:         ModeFSM,
+func (fp *FSMPipeline) Run(rc *core.Context, entry string) (*core.Report, error) {
+	report := &core.Report{
+		Mode:         core.ModeFSM,
 		TraceID:      rc.TraceID,
 		StageOrder:   []string{},
 		StageResults: make(map[string]core.StageResult),
@@ -106,16 +105,12 @@ func (fp *FSMPipeline) Run(rc *core.RunContext, entry string) (*RunReport, error
 		}
 	}
 
-	if len(report.StageResults) > 0 && report.Success {
-		report.Success = true
-	}
-
 	report.DurationMs = time.Since(start).Milliseconds()
 	return report, nil
 }
 
-func (fp *FSMPipeline) makeStageRunner() func(*core.RunContext, core.Stage) core.StageResult {
-	runner := func(rc *core.RunContext, st core.Stage) core.StageResult {
+func (fp *FSMPipeline) makeStageRunner() func(*core.Context, core.Stage) core.StageResult {
+	runner := func(rc *core.Context, st core.Stage) core.StageResult {
 		return st.Run(rc)
 	}
 

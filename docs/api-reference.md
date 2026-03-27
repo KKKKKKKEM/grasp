@@ -2,21 +2,21 @@
 
 ## core 包
 
-### RunContext
+### Context
 
 贯穿整个执行流的上下文对象，实现 `context.Context` 接口。
 
 ```go
-func NewRunContext(ctx context.Context, traceID string) *RunContext
+func NewContext(ctx context.Context, traceID string) *Context
 ```
 
 **方法：**
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| `WithValue` | `(key string, val any) *RunContext` | 写入共享状态，返回自身（链式调用） |
-| `WithTimeout` | `(d time.Duration) (*RunContext, context.CancelFunc)` | 创建带超时的子上下文 |
-| `WithCancel` | `() (*RunContext, context.CancelFunc)` | 创建可取消的子上下文 |
+| `WithValue` | `(key string, val any) *Context` | 写入共享状态，返回自身（链式调用） |
+| `WithTimeout` | `(d time.Duration) (*Context, context.CancelFunc)` | 创建带超时的子上下文 |
+| `WithCancel` | `() (*Context, context.CancelFunc)` | 创建可取消的子上下文 |
 | `WithSuspend` | `(fn SuspendFunc)` | 注入 SSE 挂起函数（框架内部调用） |
 | `WithReporter` | `(r ProgressReporter)` | 注入进度上报器 |
 | `Suspend` | `() SuspendFunc` | 获取挂起函数（可能为 nil） |
@@ -39,7 +39,7 @@ func NewRunContext(ctx context.Context, traceID string) *RunContext
 ```go
 type Stage interface {
     Name() string
-    Run(rc *RunContext) StageResult
+    Run(rc *Context) StageResult
 }
 ```
 
@@ -64,7 +64,7 @@ func (sr *StageResult) IsTerminal() bool
 ### Middleware
 
 ```go
-type StageRunner func(rc *RunContext, st Stage) StageResult
+type StageRunner func(rc *Context, st Stage) StageResult
 type Middleware  func(next StageRunner) StageRunner
 
 // 按注册顺序组合中间件（先注册先执行）
@@ -77,12 +77,12 @@ func Chain(mws ...Middleware) Middleware
 
 ```go
 type App[Req, Resp any] interface {
-    Invoke(ctx context.Context, req Req) (Resp, error)
+    Invoke(rc *Context, req Req) (Resp, error)
 }
 
 // 函数适配器
-type AppFunc[Req, Resp any] func(context.Context, Req) (Resp, error)
-func (f AppFunc[Req, Resp]) Invoke(ctx context.Context, req Req) (Resp, error)
+type AppFunc[Req, Resp any] func(*Context, Req) (Resp, error)
+func (f AppFunc[Req, Resp]) Invoke(rc *Context, req Req) (Resp, error)
 ```
 
 ---
@@ -108,7 +108,7 @@ type DefaultErrorPolicy struct {
 ```go
 type InteractionPlugin interface {
     Type() InteractionType
-    Interact(rc *RunContext, i Interaction) error
+    Interact(rc *Context, i Interaction) error
 }
 
 type Interaction struct {
@@ -120,7 +120,7 @@ type InteractionResult struct {
     Answer any
 }
 
-// SuspendFunc 由 SSE 框架层注入到 RunContext
+// SuspendFunc 由 SSE 框架层注入到 Context
 type SuspendFunc func(i Interaction) (InteractionResult, error)
 ```
 
@@ -149,8 +149,8 @@ type ProgressTracker interface {
 ```go
 type Pipeline interface {
     Mode() Mode
-    Register(stages ...core.Stage) Pipeline
-    Run(rc *core.RunContext, entry string) (*RunReport, error)
+    Register(stages ...core.Stage)
+    Run(rc *core.Context, entry string) (*Report, error)
 }
 
 type Mode string
@@ -168,9 +168,9 @@ const (
 ```go
 func NewLinearPipeline() *LinearPipeline
 
-func (lp *LinearPipeline) Register(stages ...core.Stage) Pipeline
+func (lp *LinearPipeline) Register(stages ...core.Stage)
 func (lp *LinearPipeline) Use(mw ...core.Middleware) *LinearPipeline
-func (lp *LinearPipeline) Run(rc *core.RunContext, entry string) (*RunReport, error)
+func (lp *LinearPipeline) Run(rc *core.Context, entry string) (*Report, error)
 ```
 
 ### FSMPipeline
@@ -178,10 +178,10 @@ func (lp *LinearPipeline) Run(rc *core.RunContext, entry string) (*RunReport, er
 ```go
 func NewFSMPipeline() *FSMPipeline
 
-func (fp *FSMPipeline) Register(stages ...core.Stage) Pipeline
+func (fp *FSMPipeline) Register(stages ...core.Stage)
 func (fp *FSMPipeline) Use(mw ...core.Middleware) *FSMPipeline
 func (fp *FSMPipeline) WithMaxVisits(max int) *FSMPipeline
-func (fp *FSMPipeline) Run(rc *core.RunContext, entry string) (*RunReport, error)
+func (fp *FSMPipeline) Run(rc *core.Context, entry string) (*Report, error)
 ```
 
 ---
@@ -241,13 +241,13 @@ func New(name string, opts ...Option) *Stage
 func WithBranch(when CondFunc, next string) Option
 func WithFallback(next string) Option
 
-type CondFunc func(rc *core.RunContext) bool
+type CondFunc func(rc *core.Context) bool
 ```
 
 **示例：**
 ```go
 router := cond.New("router",
-    cond.WithBranch(func(rc *core.RunContext) bool {
+    cond.WithBranch(func(rc *core.Context) bool {
         return rc.Values["retry"].(bool)
     }, "retry-handler"),
     cond.WithFallback("success-handler"),
@@ -377,7 +377,7 @@ type ParseItem struct {
 
 ```go
 // Func 将普通函数包装为 core.App，自动推断泛型参数，省去手写 AppFunc[Req,Resp] 转换。
-func Func[Req, Resp any](fn func(context.Context, Req) (Resp, error)) core.App[Req, Resp]
+func Func[Req, Resp any](fn func(*core.Context, Req) (Resp, error)) core.App[Req, Resp]
 ```
 
 ### HTTP 注册
@@ -386,7 +386,7 @@ func Func[Req, Resp any](fn func(context.Context, Req) (Resp, error)) core.App[R
 type HTTPConfig[Req, Resp any] struct {
     App      core.App[Req, Resp]
     BuildReq func(*gin.Context) (Req, error) // 默认 ShouldBindJSON
-    OnStart  func(*gin.Context, *core.RunContext, Req) // 可选，用于注入 RunContext 数据
+    OnStart  func(*gin.Context, *core.Context, Req) // 可选，用于注入 Context 数据
 }
 
 func HTTP[Req, Resp any](r gin.IRouter, path string, cfg HTTPConfig[Req, Resp])
@@ -401,7 +401,7 @@ type SSEConfig[Req, Resp any] struct {
     App      core.App[Req, Resp]
     Store    *SSESessionStore               // 默认 DefaultSSESessionStore()
     BuildReq func(*gin.Context) (Req, error) // 默认 ShouldBindJSON
-    OnStart  func(*SSESession, *core.RunContext, Req) // 可选，用于注入 Reporter 等
+    OnStart  func(*SSESession, *core.Context, Req) // 可选，用于注入 Reporter 等
 }
 
 func SSE[Req, Resp any](r gin.IRouter, path string, cfg SSEConfig[Req, Resp])
@@ -437,7 +437,7 @@ func (s *SSESession) EmitProgress(data any)
 ```go
 func NewGraspPipeline(opts ...Option) *Pipeline
 
-func (p *Pipeline) Invoke(ctx context.Context, task *Task) (*Report, error)
+func (p *Pipeline) Invoke(rc *core.Context, task *Task) (*Report, error)
 func (p *Pipeline) GinRegister(r gin.IRouter) gin.IRouter
 func (p *Pipeline) Serve(addr string) error
 ```

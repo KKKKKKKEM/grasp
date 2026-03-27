@@ -1,7 +1,6 @@
 package grasp
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -31,7 +30,7 @@ type Pipeline struct {
 	plugin           core.InteractionPlugin
 }
 
-var _ pipeline.Pipeline = (*Pipeline)(nil)
+var _ core.Pipeline = (*Pipeline)(nil)
 
 func NewGraspPipeline(opts ...Option) *Pipeline {
 	p := &Pipeline{LinearPipeline: pipeline.NewLinearPipeline()}
@@ -41,9 +40,9 @@ func NewGraspPipeline(opts ...Option) *Pipeline {
 	return p
 }
 
-func (p *Pipeline) Run(rc *core.RunContext, _ string) (*pipeline.RunReport, error) {
-	report := &pipeline.RunReport{
-		Mode:         pipeline.ModeLinear,
+func (p *Pipeline) Run(rc *core.Context, _ string) (*core.Report, error) {
+	report := &core.Report{
+		Mode:         core.ModeLinear,
 		TraceID:      rc.TraceID,
 		StageOrder:   []string{"grasp"},
 		StageResults: make(map[string]core.StageResult),
@@ -69,11 +68,7 @@ func (p *Pipeline) Run(rc *core.RunContext, _ string) (*pipeline.RunReport, erro
 	return report, nil
 }
 
-func (p *Pipeline) Invoke(ctx context.Context, task *Task) (*Report, error) {
-	rc, ok := ctx.(*core.RunContext)
-	if !ok {
-		rc = core.NewRunContext(ctx, uuid.NewString())
-	}
+func (p *Pipeline) Invoke(rc *core.Context, task *Task) (*Report, error) {
 	rc.WithValue("task", task)
 	runReport, err := p.Run(rc, "grasp")
 	if err != nil {
@@ -86,7 +81,7 @@ func (p *Pipeline) Invoke(ctx context.Context, task *Task) (*Report, error) {
 	return result, nil
 }
 
-func fail(report *pipeline.RunReport, start time.Time, err error) (*pipeline.RunReport, error) {
+func fail(report *core.Report, start time.Time, err error) (*core.Report, error) {
 	report.StageResults["grasp"] = core.StageResult{
 		Status: core.StageFailed,
 		Err:    err,
@@ -96,7 +91,7 @@ func fail(report *pipeline.RunReport, start time.Time, err error) (*pipeline.Run
 	return report, err
 }
 
-func (p *Pipeline) run(rc *core.RunContext, task *Task) (*Report, error) {
+func (p *Pipeline) run(rc *core.Context, task *Task) (*Report, error) {
 	start := time.Now()
 	report := &Report{}
 
@@ -128,7 +123,7 @@ func (p *Pipeline) run(rc *core.RunContext, task *Task) (*Report, error) {
 	return report, nil
 }
 
-func (p *Pipeline) selectItems(rc *core.RunContext, task *Task, items []extract.ParseItem) ([]extract.ParseItem, error) {
+func (p *Pipeline) selectItems(rc *core.Context, task *Task, items []extract.ParseItem) ([]extract.ParseItem, error) {
 	if p.plugin != nil {
 		i := core.Interaction{Type: InteractionTypeSelect, Payload: items}
 		if err := p.plugin.Interact(rc, i); err != nil {
@@ -143,7 +138,7 @@ func (p *Pipeline) selectItems(rc *core.RunContext, task *Task, items []extract.
 	return task.resolveSelector(p.defaultSelector)(rc, items)
 }
 
-func (p *Pipeline) runExtract(rc *core.RunContext, task *Task) ([]extract.ParseItem, int, error) {
+func (p *Pipeline) runExtract(rc *core.Context, task *Task) ([]extract.ParseItem, int, error) {
 	maxRounds := task.Extract.MaxRounds
 	if maxRounds <= 0 {
 		maxRounds = 1
@@ -174,7 +169,7 @@ func (p *Pipeline) runExtract(rc *core.RunContext, task *Task) ([]extract.ParseI
 }
 
 func (p *Pipeline) extractRound(
-	rc *core.RunContext,
+	rc *core.Context,
 	urls []string,
 	forcedParser string,
 	opts *extract.Opts,
@@ -196,7 +191,7 @@ func (p *Pipeline) extractRound(
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			child := core.NewRunContext(rc, uuid.NewString())
+			child := core.NewContext(rc, uuid.NewString())
 			child.WithValue("task", &extract.Task{
 				URL:          u,
 				Opts:         opts,
@@ -228,7 +223,7 @@ func (p *Pipeline) extractRound(
 	return direct, nextQueue, nil
 }
 
-func (p *Pipeline) buildDownloadTasks(rc *core.RunContext, items []extract.ParseItem, task *Task) ([]*download.Task, error) {
+func (p *Pipeline) buildDownloadTasks(rc *core.Context, items []extract.ParseItem, task *Task) ([]*download.Task, error) {
 	transformFn := task.resolveTransform(p.defaultTransform)
 	baseOpts := task.toDownloadOpts()
 
@@ -256,8 +251,8 @@ func (p *Pipeline) buildDownloadTasks(rc *core.RunContext, items []extract.Parse
 	return tasks, nil
 }
 
-func (p *Pipeline) runDownload(rc *core.RunContext, tasks []*download.Task) ([]*download.Result, error) {
-	child := core.NewRunContext(rc, uuid.NewString())
+func (p *Pipeline) runDownload(rc *core.Context, tasks []*download.Task) ([]*download.Result, error) {
+	child := core.NewContext(rc, uuid.NewString())
 	child.WithValue("tasks", tasks)
 
 	sr := p.downloader.Run(child)

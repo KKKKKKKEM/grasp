@@ -1,13 +1,11 @@
 package serve
 
 import (
-	"context"
-
 	"github.com/KKKKKKKEM/flowkit/core"
 	"github.com/gin-gonic/gin"
 )
 
-func Func[Req, Resp any](fn func(context.Context, Req) (Resp, error)) core.App[Req, Resp] {
+func Func[Req, Resp any](fn func(*core.Context, Req) (Resp, error)) core.App[Req, Resp] {
 	return core.AppFunc[Req, Resp](fn)
 }
 

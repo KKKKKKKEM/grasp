@@ -50,7 +50,7 @@ func applyFallback(task *Task, fb *Opts, headers map[string]string) {
 	}
 }
 
-func (s *DirectDownloadStage) Run(rc *core.RunContext) core.StageResult {
+func (s *DirectDownloadStage) Run(rc *core.Context) core.StageResult {
 	tasks, err := s.loadTasks(rc)
 	if err != nil {
 		return core.StageResult{Status: core.StageFailed, Err: err}
@@ -67,7 +67,7 @@ func (s *DirectDownloadStage) Run(rc *core.RunContext) core.StageResult {
 	return s.downloadBatch(rc, tasks)
 }
 
-func (s *DirectDownloadStage) loadTasks(rc *core.RunContext) ([]*Task, error) {
+func (s *DirectDownloadStage) loadTasks(rc *core.Context) ([]*Task, error) {
 	inputKey := s.opts.inputKey
 	if inputKey == "" {
 		inputKey = "tasks"
@@ -88,7 +88,7 @@ func (s *DirectDownloadStage) loadTasks(rc *core.RunContext) ([]*Task, error) {
 	}
 }
 
-func (s *DirectDownloadStage) downloadOne(rc *core.RunContext, task *Task) core.StageResult {
+func (s *DirectDownloadStage) downloadOne(rc *core.Context, task *Task) core.StageResult {
 	dl := NewHTTPDownloader()
 	result, err := dl.Download(rc, task)
 	if err != nil {
@@ -104,7 +104,7 @@ func (s *DirectDownloadStage) downloadOne(rc *core.RunContext, task *Task) core.
 	}
 }
 
-func (s *DirectDownloadStage) downloadBatch(rc *core.RunContext, tasks []*Task) core.StageResult {
+func (s *DirectDownloadStage) downloadBatch(rc *core.Context, tasks []*Task) core.StageResult {
 	resultsCh := make(chan batchResult, len(tasks))
 	var wg sync.WaitGroup
 

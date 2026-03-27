@@ -7,9 +7,9 @@ import (
 
 type SharedState map[string]any
 
-// RunContext 实现 context.Context 接口，同时承载业务数据
+// Context 实现 context.Context 接口，同时承载业务数据
 // 这是整个框架的核心上下文对象，所有 Stage 通过它进行数据共享与信号传递
-type RunContext struct {
+type Context struct {
 	ctx       context.Context
 	TraceID   string
 	Values    SharedState // 执行过程中的中间产物与共享数据
@@ -17,20 +17,20 @@ type RunContext struct {
 	StartedAt time.Time
 }
 
-func (rc *RunContext) Deadline() (deadline time.Time, ok bool) {
+func (rc *Context) Deadline() (deadline time.Time, ok bool) {
 	return rc.ctx.Deadline()
 }
 
-func (rc *RunContext) Done() <-chan struct{} {
+func (rc *Context) Done() <-chan struct{} {
 	return rc.ctx.Done()
 }
 
-func (rc *RunContext) Err() error {
+func (rc *Context) Err() error {
 	return rc.ctx.Err()
 }
 
 // Value 先查业务 Values，再落回到底层 context
-func (rc *RunContext) Value(key interface{}) interface{} {
+func (rc *Context) Value(key interface{}) interface{} {
 	if k, ok := key.(string); ok {
 		if v, exist := rc.Values[k]; exist {
 			return v
@@ -39,12 +39,12 @@ func (rc *RunContext) Value(key interface{}) interface{} {
 	return rc.ctx.Value(key)
 }
 
-// NewRunContext 创建一个新的 RunContext
-func NewRunContext(ctx context.Context, traceID string) *RunContext {
+// NewContext 创建一个新的 Context
+func NewContext(ctx context.Context, traceID string) *Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return &RunContext{
+	return &Context{
 		ctx:       ctx,
 		TraceID:   traceID,
 		Values:    make(SharedState),
@@ -53,10 +53,10 @@ func NewRunContext(ctx context.Context, traceID string) *RunContext {
 	}
 }
 
-// WithTimeout 返回一个新的带超时的 RunContext
-func (rc *RunContext) WithTimeout(d time.Duration) (*RunContext, context.CancelFunc) {
+// WithTimeout 返回一个新的带超时的 Context
+func (rc *Context) WithTimeout(d time.Duration) (*Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(rc.ctx, d)
-	return &RunContext{
+	return &Context{
 		ctx:       ctx,
 		TraceID:   rc.TraceID,
 		Values:    rc.Values,
@@ -65,10 +65,10 @@ func (rc *RunContext) WithTimeout(d time.Duration) (*RunContext, context.CancelF
 	}, cancel
 }
 
-// WithCancel 返回一个新的可取消的 RunContext
-func (rc *RunContext) WithCancel() (*RunContext, context.CancelFunc) {
+// WithCancel 返回一个新的可取消的 Context
+func (rc *Context) WithCancel() (*Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(rc.ctx)
-	return &RunContext{
+	return &Context{
 		ctx:       ctx,
 		TraceID:   rc.TraceID,
 		Values:    rc.Values,
@@ -77,13 +77,13 @@ func (rc *RunContext) WithCancel() (*RunContext, context.CancelFunc) {
 	}, cancel
 }
 
-// WithValue 返回一个新的包含值的 RunContext
-func (rc *RunContext) WithValue(key string, val any) *RunContext {
+// WithValue 返回一个新的包含值的 Context
+func (rc *Context) WithValue(key string, val any) *Context {
 	rc.Values[key] = val
 	return rc
 }
 
 // Duration 返回从启动到现在的耗时
-func (rc *RunContext) Duration() time.Duration {
+func (rc *Context) Duration() time.Duration {
 	return time.Since(rc.StartedAt)
 }

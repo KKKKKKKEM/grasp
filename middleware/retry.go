@@ -5,7 +5,7 @@ import "github.com/KKKKKKKEM/flowkit/core"
 // RetryMiddleware 根据 ErrorPolicy 自动重试失败的 stage
 func RetryMiddleware(policy core.ErrorPolicy) core.Middleware {
 	return func(next core.StageRunner) core.StageRunner {
-		return func(rc *core.RunContext, st core.Stage) core.StageResult {
+		return func(rc *core.Context, st core.Stage) core.StageResult {
 			var result core.StageResult
 			attempt := 0
 

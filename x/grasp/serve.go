@@ -9,7 +9,7 @@ import (
 func (p *Pipeline) GinRegister(r gin.IRouter) gin.IRouter {
 	serve.SSE(r, "/run", serve.SSEConfig[*Task, *Report]{
 		App: serve.Func(p.Invoke),
-		OnStart: func(sess *serve.SSESession, rc *core.RunContext, _ *Task) {
+		OnStart: func(sess *serve.SSESession, rc *core.Context, _ *Task) {
 			rc.WithReporter(NewSSEReporter(sess))
 		},
 	})

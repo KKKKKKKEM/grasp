@@ -19,15 +19,14 @@ func NewLinearPipeline() *LinearPipeline {
 	}
 }
 
-func (lp *LinearPipeline) Mode() Mode {
-	return ModeLinear
+func (lp *LinearPipeline) Mode() core.Mode {
+	return core.ModeLinear
 }
 
-func (lp *LinearPipeline) Register(stages ...core.Stage) Pipeline {
+func (lp *LinearPipeline) Register(stages ...core.Stage) {
 	for _, s := range stages {
 		lp.stages[s.Name()] = s
 	}
-	return lp
 }
 
 func (lp *LinearPipeline) Use(mw ...core.Middleware) *LinearPipeline {
@@ -35,9 +34,9 @@ func (lp *LinearPipeline) Use(mw ...core.Middleware) *LinearPipeline {
 	return lp
 }
 
-func (lp *LinearPipeline) Run(rc *core.RunContext, entry string) (*RunReport, error) {
-	report := &RunReport{
-		Mode:         ModeLinear,
+func (lp *LinearPipeline) Run(rc *core.Context, entry string) (*core.Report, error) {
+	report := &core.Report{
+		Mode:         core.ModeLinear,
 		TraceID:      rc.TraceID,
 		StageOrder:   []string{},
 		StageResults: make(map[string]core.StageResult),
@@ -77,9 +76,6 @@ func (lp *LinearPipeline) Run(rc *core.RunContext, entry string) (*RunReport, er
 		}
 
 		st = nil // Linear 模式中，每个 stage 执行一次就结束
-	}
-
-	if report.Success {
 		report.Success = true
 	}
 
@@ -87,8 +83,8 @@ func (lp *LinearPipeline) Run(rc *core.RunContext, entry string) (*RunReport, er
 	return report, nil
 }
 
-func (lp *LinearPipeline) makeStageRunner() func(*core.RunContext, core.Stage) core.StageResult {
-	runner := func(rc *core.RunContext, st core.Stage) core.StageResult {
+func (lp *LinearPipeline) makeStageRunner() func(*core.Context, core.Stage) core.StageResult {
+	runner := func(rc *core.Context, st core.Stage) core.StageResult {
 		return st.Run(rc)
 	}
 

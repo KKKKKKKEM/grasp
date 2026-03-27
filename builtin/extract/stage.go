@@ -31,7 +31,7 @@ func (s *Stage) Mount(extractors ...Extractor) *Stage {
 
 func (s *Stage) Name() string { return s.stageName }
 
-func (s *Stage) loadTask(rc *core.RunContext) (*Task, error) {
+func (s *Stage) loadTask(rc *core.Context) (*Task, error) {
 
 	var task *Task
 	inputKey := s.opts.inputKey
@@ -98,7 +98,7 @@ func (s *Stage) resolve(rawURL, forcedHint string) *Parser {
 	return candidates[0]
 }
 
-func (s *Stage) Run(rc *core.RunContext) core.StageResult {
+func (s *Stage) Run(rc *core.Context) core.StageResult {
 
 	task, err := s.loadTask(rc)
 	if err != nil {

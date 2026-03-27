@@ -12,11 +12,11 @@ type ProgressReporter interface {
 	Wait()
 }
 
-func (rc *RunContext) WithReporter(r ProgressReporter) {
+func (rc *Context) WithReporter(r ProgressReporter) {
 	rc.Values[reporterKey] = r
 }
 
-func (rc *RunContext) Reporter() ProgressReporter {
+func (rc *Context) Reporter() ProgressReporter {
 	r, _ := rc.Values[reporterKey].(ProgressReporter)
 	return r
 }

@@ -22,7 +22,7 @@ func New(name string, opts ...Option) *Stage {
 
 func (s *Stage) Name() string { return s.name }
 
-func (s *Stage) Run(rc *core.RunContext) core.StageResult {
+func (s *Stage) Run(rc *core.Context) core.StageResult {
 	for _, b := range s.branches {
 		if b.When(rc) {
 			return core.StageResult{

@@ -11,7 +11,7 @@ import (
 // LoggingMiddleware 记录 stage 的执行（开始、结束、耗时、错误）
 func LoggingMiddleware(logger *log.Logger) core.Middleware {
 	return func(next core.StageRunner) core.StageRunner {
-		return func(rc *core.RunContext, st core.Stage) core.StageResult {
+		return func(rc *core.Context, st core.Stage) core.StageResult {
 			nameTag := fmt.Sprintf("[%s]", st.Name())
 			logger.Printf("%s Stage started (traceID=%s)", nameTag, rc.TraceID)
 

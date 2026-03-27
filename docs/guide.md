@@ -30,7 +30,7 @@ import (
 type FetchStage struct{}
 
 func (s *FetchStage) Name() string { return "fetch" }
-func (s *FetchStage) Run(rc *core.RunContext) core.StageResult {
+func (s *FetchStage) Run(rc *core.Context) core.StageResult {
     // 从 rc.Values 读取输入
     url := rc.Values["url"].(string)
 
@@ -47,7 +47,7 @@ func (s *FetchStage) Run(rc *core.RunContext) core.StageResult {
 type ParseStage struct{}
 
 func (s *ParseStage) Name() string { return "parse" }
-func (s *ParseStage) Run(rc *core.RunContext) core.StageResult {
+func (s *ParseStage) Run(rc *core.Context) core.StageResult {
     data := rc.Values["data"].([]byte)
     result := parseData(data)
 
@@ -69,7 +69,7 @@ func main() {
     )
 
     // 创建运行上下文
-    rc := core.NewRunContext(context.Background(), "trace-001")
+    rc := core.NewContext(context.Background(), "trace-001")
     rc.WithValue("url", "https://example.com/data")
 
     // 执行
@@ -101,7 +101,7 @@ import (
 // 检查状态的条件 Stage
 type CheckStage struct{}
 func (s *CheckStage) Name() string { return "check" }
-func (s *CheckStage) Run(rc *core.RunContext) core.StageResult {
+func (s *CheckStage) Run(rc *core.Context) core.StageResult {
     status := getStatus()
     return core.StageResult{
         Status:  core.StageSuccess,
@@ -111,10 +111,10 @@ func (s *CheckStage) Run(rc *core.RunContext) core.StageResult {
 
 // 路由 Stage（使用 cond.Stage）
 router := cond.New("router",
-    cond.WithBranch(func(rc *core.RunContext) bool {
+    cond.WithBranch(func(rc *core.Context) bool {
         return rc.Values["status"] == "error"
     }, "handle-error"),
-    cond.WithBranch(func(rc *core.RunContext) bool {
+    cond.WithBranch(func(rc *core.Context) bool {
         return rc.Values["status"] == "pending"
     }, "retry"),
     cond.WithFallback("finalize"),  // 默认跳转
@@ -186,8 +186,7 @@ func main() {
     r := gin.Default()
 
     serve.HTTP(r, "/api/process", serve.HTTPConfig[MyReq, MyResp]{
-        App: serve.Func(func(ctx context.Context, req MyReq) (MyResp, error) {
-            rc := core.NewRunContext(ctx, uuid.NewString())
+        App: serve.Func(func(rc *core.Context, req MyReq) (MyResp, error) {
             rc.WithValue("url", req.URL)
 
             report, err := myPipeline.Run(rc, "start")
@@ -216,7 +215,7 @@ func main() {
 
     serve.SSE(r, "/api/run", serve.SSEConfig[MyReq, MyResp]{
         App: serve.Func(myFunc),
-        OnStart: func(sess *serve.SSESession, rc *core.RunContext, req MyReq) {
+        OnStart: func(sess *serve.SSESession, rc *core.Context, req MyReq) {
             rc.WithReporter(mySSEReporter(sess))
         },
     })
@@ -300,7 +299,9 @@ import (
 
     "github.com/KKKKKKKEM/flowkit/builtin/download"
     "github.com/KKKKKKKEM/flowkit/builtin/extract"
+    "github.com/KKKKKKKEM/flowkit/core"
     "github.com/KKKKKKKEM/flowkit/x/grasp"
+    "github.com/google/uuid"
 )
 
 func main() {
@@ -330,7 +331,7 @@ func main() {
         Selector: grasp.SelectFirst(10), // 只下载前 10 个
     }
 
-    report, err := p.Invoke(context.Background(), task)
+    report, err := p.Invoke(core.NewContext(context.Background(), uuid.NewString()), task)
     if err != nil {
         panic(err)
     }
@@ -432,7 +433,7 @@ lp.Use(
 ```go
 func AuthMiddleware(token string) core.Middleware {
     return func(next core.StageRunner) core.StageRunner {
-        return func(rc *core.RunContext, st core.Stage) core.StageResult {
+        return func(rc *core.Context, st core.Stage) core.StageResult {
             if rc.Values["auth_token"] != token {
                 return core.StageResult{
                     Status: core.StageFailed,
@@ -461,7 +462,7 @@ func (s *FetchDataStage) Name() string { return "fetch-data" }
 func (s *S1) Name() string { return "stage 1" }
 ```
 
-### 2. RunContext 共享状态约定
+### 2. Context 共享状态约定
 
 建议在业务层定义常量键名，避免魔法字符串：
 
@@ -489,7 +490,7 @@ data := rc.Values[KeyData].([]byte)
 - **跳过逻辑** → 返回 `StageSkipped`（不影响 Pipeline 成功状态）
 
 ```go
-func (s *MyStage) Run(rc *core.RunContext) core.StageResult {
+func (s *MyStage) Run(rc *core.Context) core.StageResult {
     data, ok := rc.Values["data"]
     if !ok {
         return core.StageResult{
@@ -527,7 +528,7 @@ logger.Printf("[%s] Processing: %s", rc.TraceID, url)
 在需要实时进度的 Stage 中，通过 `rc.Reporter()` 上报：
 
 ```go
-func (s *DownloadStage) Run(rc *core.RunContext) core.StageResult {
+func (s *DownloadStage) Run(rc *core.Context) core.StageResult {
     reporter := rc.Reporter()
     if reporter != nil {
         tracker := reporter.Track("my-file.zip", totalSize)

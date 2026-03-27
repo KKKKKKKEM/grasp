@@ -30,7 +30,7 @@ func New(name string, next string, children []core.Stage, opts ...Option) *Stage
 
 func (s *Stage) Name() string { return s.name }
 
-func (s *Stage) Run(rc *core.RunContext) core.StageResult {
+func (s *Stage) Run(rc *core.Context) core.StageResult {
 	switch {
 	case s.opts.wait == WaitAny:
 		return s.runWaitAny(rc)
@@ -41,7 +41,7 @@ func (s *Stage) Run(rc *core.RunContext) core.StageResult {
 	}
 }
 
-func (s *Stage) runWaitAllFailFast(rc *core.RunContext) core.StageResult {
+func (s *Stage) runWaitAllFailFast(rc *core.Context) core.StageResult {
 	type subResult struct {
 		name   string
 		result core.StageResult
@@ -90,7 +90,7 @@ func (s *Stage) runWaitAllFailFast(rc *core.RunContext) core.StageResult {
 	return core.StageResult{Status: core.StageSuccess, Next: s.next, Outputs: merged}
 }
 
-func (s *Stage) runWaitAny(rc *core.RunContext) core.StageResult {
+func (s *Stage) runWaitAny(rc *core.Context) core.StageResult {
 	type subResult struct {
 		name   string
 		result core.StageResult
@@ -145,7 +145,7 @@ func (s *Stage) runWaitAny(rc *core.RunContext) core.StageResult {
 	return core.StageResult{Status: core.StageFailed, Err: lastErr}
 }
 
-func (s *Stage) runBestEffort(rc *core.RunContext) core.StageResult {
+func (s *Stage) runBestEffort(rc *core.Context) core.StageResult {
 	type subResult struct {
 		name   string
 		result core.StageResult

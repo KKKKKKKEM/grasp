@@ -21,7 +21,7 @@ func (e *ErrInteractionRequired) Error() string {
 	return fmt.Sprintf("interaction required: type=%s", e.Interaction.Type)
 }
 
-// SuspendFunc is injected into RunContext by the SSE framework layer.
+// SuspendFunc is injected into Context by the SSE framework layer.
 // When a plugin calls it, the pipeline suspends: the Interaction is pushed
 // to the SSE stream and the call blocks until the client submits an answer
 // via POST /answer, at which point the result is returned and execution resumes.
@@ -32,13 +32,13 @@ type SuspendFunc func(i Interaction) (InteractionResult, error)
 // suspendKey is the rc.Values key used to store SuspendFunc.
 const suspendKey = "__suspend__"
 
-// WithSuspend injects a SuspendFunc into the RunContext (called by the framework).
-func (rc *RunContext) WithSuspend(fn SuspendFunc) {
+// WithSuspend injects a SuspendFunc into the Context (called by the framework).
+func (rc *Context) WithSuspend(fn SuspendFunc) {
 	rc.Values[suspendKey] = fn
 }
 
 // Suspend returns the SuspendFunc if one was injected (Web/SSE mode), or nil (CLI mode).
-func (rc *RunContext) Suspend() SuspendFunc {
+func (rc *Context) Suspend() SuspendFunc {
 	fn, _ := rc.Values[suspendKey].(SuspendFunc)
 	return fn
 }
@@ -54,5 +54,5 @@ func (rc *RunContext) Suspend() SuspendFunc {
 // the framework differs.
 type InteractionPlugin interface {
 	Type() InteractionType
-	Interact(rc *RunContext, i Interaction) error
+	Interact(rc *Context, i Interaction) error
 }

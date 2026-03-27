@@ -15,12 +15,12 @@ const (
 )
 
 // Stage 是工作流中的最小执行单元
-// 它接收 RunContext（实现了 context.Context），返回 StageResult
+// 它接收 Context（实现了 context.Context），返回 StageResult
 type Stage interface {
 	// Name 返回这个 stage 的唯一标识，用于日志、依赖图、下一跳指引
 	Name() string
 	// Run 执行业务逻辑，rc 同时承载信号（Done、Err、Deadline）和业务数据（Values、Tags）
-	Run(rc *RunContext) StageResult
+	Run(rc *Context) StageResult
 }
 
 // StageResult 是单个 Stage 执行的结果
