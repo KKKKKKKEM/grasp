@@ -1,0 +1,55 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"log"
+	"time"
+
+	"github.com/KKKKKKKEM/flowkit/builtin/download"
+	"github.com/KKKKKKKEM/flowkit/builtin/extract"
+	"github.com/KKKKKKKEM/flowkit/x/grasp"
+	"github.com/KKKKKKKEM/flowkit/x/grasp/sites/pexels"
+	"github.com/vbauerster/mpb/v8"
+)
+
+func main() {
+	progress := mpb.New(mpb.WithRefreshRate(120 * time.Millisecond))
+	reporter := grasp.NewMpbReporter(progress)
+
+	extractor := extract.NewStage("extractor")
+	extractor.Mount(&pexels.APIParser{})
+
+	downloader := download.NewStage("download")
+
+	p := grasp.NewGraspPipeline(
+		grasp.WithExtractor(extractor),
+		grasp.WithDownloader(downloader),
+		grasp.WithSelector(grasp.InteractiveCLI()),
+		grasp.WithProgress(reporter),
+	)
+
+	task := &grasp.Task{
+		URLs: []string{"https://api.pexels.com/v1/photos/1000"},
+		Extract: grasp.ExtractConfig{
+			MaxRounds:   1,
+			Concurrency: 1,
+		},
+		Download: grasp.DownloadConfig{
+			Dest: ".",
+		},
+	}
+
+	report, err := p.Run(context.Background(), task)
+
+	progress.Wait()
+
+	if err != nil {
+		log.Fatalf("pipeline failed: %v", err)
+	}
+
+	bytes, _ := json.Marshal(report)
+	log.Printf("completed in %dms, success=%v, rounds=%d, items=%d",
+		report.DurationMs, report.Success, report.Rounds, report.ParsedItems)
+	log.Printf("report: %s", string(bytes))
+}
