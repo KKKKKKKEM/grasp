@@ -8,6 +8,7 @@ import (
 
 	"github.com/KKKKKKKEM/flowkit/builtin/download"
 	"github.com/KKKKKKKEM/flowkit/builtin/extract"
+	"github.com/KKKKKKKEM/flowkit/core"
 	"github.com/KKKKKKKEM/flowkit/x/grasp"
 	"github.com/KKKKKKKEM/flowkit/x/grasp/sites/pexels"
 	"github.com/vbauerster/mpb/v8"
@@ -25,7 +26,7 @@ func main() {
 	p := grasp.NewGraspPipeline(
 		grasp.WithExtractor(extractor),
 		grasp.WithDownloader(downloader),
-		grasp.WithSelector(grasp.InteractiveCLI()),
+		grasp.WithPlugin(grasp.CLISelectPlugin{}),
 		grasp.WithProgress(reporter),
 	)
 
@@ -40,7 +41,10 @@ func main() {
 		},
 	}
 
-	report, err := p.Run(context.Background(), task)
+	rc := core.NewRunContext(context.Background(), "pexels-example")
+	rc.WithValue("task", task)
+
+	runReport, err := p.Run(rc, "grasp")
 
 	progress.Wait()
 
@@ -48,6 +52,7 @@ func main() {
 		log.Fatalf("pipeline failed: %v", err)
 	}
 
+	report := runReport.StageResults["grasp"].Outputs["report"].(*grasp.Report)
 	bytes, _ := json.Marshal(report)
 	log.Printf("completed in %dms, success=%v, rounds=%d, items=%d",
 		report.DurationMs, report.Success, report.Rounds, report.ParsedItems)
