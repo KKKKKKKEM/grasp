@@ -11,10 +11,11 @@ import (
 type SSEEventType string
 
 const (
-	SSEProgress SSEEventType = "progress"
-	SSEPending  SSEEventType = "pending"
-	SSEDone     SSEEventType = "done"
-	SSEError    SSEEventType = "error"
+	SSEEventSession SSEEventType = "session"
+	SSEProgress     SSEEventType = "progress"
+	SSEPending      SSEEventType = "pending"
+	SSEDone         SSEEventType = "done"
+	SSEError        SSEEventType = "error"
 )
 
 type SSEEvent struct {
@@ -102,6 +103,10 @@ func (s *SSESession) subscribe(lastSeq int64) (<-chan SSEEvent, func()) {
 	}
 }
 
+func (s *SSESession) EmitProgress(data any) {
+	s.emit(SSEProgress, data)
+}
+
 func (s *SSESession) suspend(interactionID string, i core.Interaction) (core.InteractionResult, error) {
 	ch := make(chan pendingAnswer, 1)
 	s.mu.Lock()
@@ -146,15 +151,12 @@ func NewSSESessionStore(ttl time.Duration) *SSESessionStore {
 	return s
 }
 
-func (s *SSESessionStore) GetOrCreate(sessionID string) (*SSESession, bool) {
+func (s *SSESessionStore) Create(sessionID string) *SSESession {
+	sess := newSSESession()
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	sess, exists := s.sessions[sessionID]
-	if !exists {
-		sess = newSSESession()
-		s.sessions[sessionID] = sess
-	}
-	return sess, exists
+	s.sessions[sessionID] = sess
+	s.mu.Unlock()
+	return sess
 }
 
 func (s *SSESessionStore) Get(sessionID string) (*SSESession, bool) {

@@ -33,6 +33,11 @@ func RegisterFunc[Req, Resp any](r gin.IRouter, path string, fn func(context.Con
 	Register(r, path, core.AppFunc[Req, Resp](fn))
 }
 
+const (
+	sessionIDKey   = "SESSION-ID"
+	lastEventIDKey = "Last-Event-ID"
+)
+
 type answerRequest struct {
 	InteractionID string                 `json:"interaction_id"`
 	Result        core.InteractionResult `json:"result"`
@@ -44,22 +49,30 @@ func SSE[Req, Resp any](
 	app core.App[Req, Resp],
 	store *SSESessionStore,
 	buildReq func(*gin.Context) (Req, error),
+	onRC ...func(*SSESession, *core.RunContext, Req),
 ) {
-	r.POST(runPath+"/:session_id", func(c *gin.Context) {
-		sessionID := c.Param("session_id")
-		if sessionID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "session_id required"})
-			return
-		}
-
+	r.POST(runPath, func(c *gin.Context) {
 		lastSeq := int64(0)
-		if v := c.GetHeader("Last-Event-ID"); v != "" {
+		if v := c.GetHeader(lastEventIDKey); v != "" {
 			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 				lastSeq = n
 			}
 		}
 
-		sess, exists := store.GetOrCreate(sessionID)
+		sessionID := c.GetHeader(sessionIDKey)
+
+		var (
+			sess   *SSESession
+			exists bool
+		)
+		if sessionID != "" {
+			sess, exists = store.Get(sessionID)
+		}
+		if sess == nil {
+			sessionID = uuid.NewString()
+			sess = store.Create(sessionID)
+			exists = false
+		}
 
 		ch, unsub := sess.subscribe(lastSeq)
 		defer unsub()
@@ -77,6 +90,10 @@ func SSE[Req, Resp any](
 					id := uuid.NewString()
 					return sess.suspend(id, i)
 				})
+
+				for _, fn := range onRC {
+					fn(sess, rc, req)
+				}
 
 				resp, err := app.Invoke(rc, req)
 
@@ -97,6 +114,9 @@ func SSE[Req, Resp any](
 		c.Header("Connection", "keep-alive")
 		c.Header("X-Accel-Buffering", "no")
 
+		writeSSEEvent(c, SSEEvent{Seq: 0, Type: SSEEventSession, Data: gin.H{"session_id": sessionID}})
+		c.Writer.Flush()
+
 		ctx := c.Request.Context()
 		for {
 			select {
@@ -116,8 +136,13 @@ func SSE[Req, Resp any](
 		}
 	})
 
-	r.POST(runPath+"/:session_id/answer", func(c *gin.Context) {
-		sessionID := c.Param("session_id")
+	r.POST(runPath+"/answer", func(c *gin.Context) {
+		sessionID := c.GetHeader(sessionIDKey)
+		if sessionID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Session-ID header required"})
+			return
+		}
+
 		sess, ok := store.Get(sessionID)
 		if !ok {
 			c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})

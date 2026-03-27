@@ -232,14 +232,19 @@ func (p *Pipeline) buildDownloadTasks(rc *core.RunContext, items []extract.Parse
 	transformFn := task.resolveTransform(p.defaultTransform)
 	baseOpts := task.toDownloadOpts()
 
+	reporter := p.reporter
+	if r, ok := rc.Values["__reporter__"].(ProgressReporter); ok {
+		reporter = r
+	}
+
 	tasks := make([]*download.Task, 0, len(items))
 	for _, item := range items {
 		t, err := transformFn(rc, item, baseOpts)
 		if err != nil {
 			return nil, fmt.Errorf("transform %q: %w", item.URI, err)
 		}
-		if p.reporter != nil {
-			p.reporter.Track(t)
+		if reporter != nil {
+			reporter.Track(t)
 		}
 		tasks = append(tasks, t)
 	}

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/KKKKKKKEM/flowkit/builtin/download"
+	"github.com/KKKKKKKEM/flowkit/builtin/serve"
 	"github.com/vbauerster/mpb/v8"
 	"github.com/vbauerster/mpb/v8/decor"
 )
@@ -18,8 +19,10 @@ type MpbReporter struct {
 	p *mpb.Progress
 }
 
-func NewMpbReporter(p *mpb.Progress) *MpbReporter {
-	return &MpbReporter{p: p}
+func NewMpbReporter() *MpbReporter {
+	progress := mpb.New(mpb.WithRefreshRate(120 * time.Millisecond))
+
+	return &MpbReporter{p: progress}
 }
 
 func (r *MpbReporter) Track(task *download.Task) {
@@ -83,3 +86,53 @@ func (r *MpbReporter) Track(task *download.Task) {
 func (r *MpbReporter) Wait() {
 	r.p.Wait()
 }
+
+type DownloadProgressData struct {
+	URL        string `json:"url"`
+	Downloaded int64  `json:"downloaded"`
+	Total      int64  `json:"total"`
+}
+
+type DownloadCompleteData struct {
+	URL  string `json:"url"`
+	Path string `json:"path"`
+	Size int64  `json:"size"`
+}
+
+type SSEReporter struct {
+	sess *serve.SSESession
+}
+
+func NewSSEReporter(sess *serve.SSESession) *SSEReporter {
+	return &SSEReporter{sess: sess}
+}
+
+func (r *SSEReporter) Track(task *download.Task) {
+	url := task.Request.URL.String()
+
+	origProgress := task.OnProgress
+	task.OnProgress = func(downloaded, total int64) {
+		r.sess.EmitProgress(DownloadProgressData{
+			URL:        url,
+			Downloaded: downloaded,
+			Total:      total,
+		})
+		if origProgress != nil {
+			origProgress(downloaded, total)
+		}
+	}
+
+	origComplete := task.OnComplete
+	task.OnComplete = func(result *download.Result) {
+		r.sess.EmitProgress(DownloadCompleteData{
+			URL:  url,
+			Path: result.Path,
+			Size: result.Size,
+		})
+		if origComplete != nil {
+			origComplete(result)
+		}
+	}
+}
+
+func (r *SSEReporter) Wait() {}

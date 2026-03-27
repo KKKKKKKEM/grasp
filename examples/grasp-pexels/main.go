@@ -4,19 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"time"
 
 	"github.com/KKKKKKKEM/flowkit/builtin/download"
 	"github.com/KKKKKKKEM/flowkit/builtin/extract"
 	"github.com/KKKKKKKEM/flowkit/core"
 	"github.com/KKKKKKKEM/flowkit/x/grasp"
 	"github.com/KKKKKKKEM/flowkit/x/grasp/sites/pexels"
-	"github.com/vbauerster/mpb/v8"
 )
 
 func main() {
-	progress := mpb.New(mpb.WithRefreshRate(120 * time.Millisecond))
-	reporter := grasp.NewMpbReporter(progress)
+	reporter := grasp.NewMpbReporter()
 
 	extractor := extract.NewStage("extractor")
 	extractor.Mount(&pexels.APIParser{})
@@ -46,7 +43,7 @@ func main() {
 
 	runReport, err := p.Run(rc, "grasp")
 
-	progress.Wait()
+	reporter.Wait()
 
 	if err != nil {
 		log.Fatalf("pipeline failed: %v", err)
