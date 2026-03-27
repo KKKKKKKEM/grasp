@@ -14,7 +14,7 @@ import (
 
 const (
 	sessionIDKey   = "SESSION-ID"
-	lastEventIDKey = "Last-Event-ID"
+	lastEventIDKey = "LAST-EVENT-ID"
 )
 
 type answerRequest struct {

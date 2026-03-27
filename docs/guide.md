@@ -273,15 +273,15 @@ eventSource.addEventListener('error', (e) => {
 });
 ```
 
-**断线重连（利用 `Last-Event-ID`）：**
+**断线重连（利用 `LAST-EVENT-ID`）：**
 
 ```javascript
-// 使用 Last-Event-ID header 重连，服务端会重放错过的事件
+// 使用 LAST-EVENT-ID header 重连，服务端会重放错过的事件
 fetch('/api/run', {
     method: 'POST',
     headers: {
         'SESSION-ID': sessionId,
-        'Last-Event-ID': lastEventId, // 上次收到的最后事件序号
+        'LAST-EVENT-ID': lastEventId, // 上次收到的最后事件序号
     },
 });
 ```
