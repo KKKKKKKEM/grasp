@@ -1,4 +1,4 @@
-package serve
+package server
 
 import (
 	"github.com/KKKKKKKEM/flowkit/core"
@@ -9,7 +9,7 @@ func Func[Req, Resp any](fn func(*core.Context, Req) (Resp, error)) core.App[Req
 	return core.AppFunc[Req, Resp](fn)
 }
 
-func defaultBuildReq[Req any](c *gin.Context) (Req, error) {
+func DefaultBuildReq[Req any](c *gin.Context) (Req, error) {
 	var req Req
 	if err := c.ShouldBindJSON(&req); err != nil {
 		return req, err

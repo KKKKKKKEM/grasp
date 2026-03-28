@@ -3,8 +3,8 @@ package grasp
 import (
 	"time"
 
-	"github.com/KKKKKKKEM/flowkit/builtin/download"
-	"github.com/KKKKKKKEM/flowkit/builtin/extract"
+	"github.com/KKKKKKKEM/flowkit/x/download"
+	"github.com/KKKKKKKEM/flowkit/x/extract"
 )
 
 type Task struct {

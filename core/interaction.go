@@ -4,9 +4,18 @@ import "fmt"
 
 type InteractionType string
 
+const (
+	InteractionTypeUserInput InteractionType = "user_input"
+	InteractionTypeApproval  InteractionType = "approval"
+	InteractionTypeCaptcha   InteractionType = "captcha"
+	InteractionTypeCustom    InteractionType = "custom"
+	InteractionTypeSelect    InteractionType = "select"
+)
+
 type Interaction struct {
 	Type    InteractionType `json:"type"`
 	Payload any             `json:"payload"`
+	Message string          `json:"message,omitempty"`
 }
 
 type InteractionResult struct {
@@ -24,15 +33,16 @@ func (e *ErrInteractionRequired) Error() string {
 // interactionKey is the rc.Values key used to store SuspendFunc.
 const interactionKey = "__interaction__"
 
-func (rc *Context) WithInteraction(plugin InteractionPlugin) {
+func (rc *Context) WithInteractionPlugin(plugin InteractionPlugin) {
 	rc.Values[interactionKey] = plugin
 }
 
-func (rc *Context) Interaction() InteractionPlugin {
+func (rc *Context) InteractionPlugin() InteractionPlugin {
 	plugin, _ := rc.Values[interactionKey].(InteractionPlugin)
 	return plugin
 }
 
 type InteractionPlugin interface {
 	Interact(rc *Context, i Interaction) (*InteractionResult, error)
+	FormatResult(rc *Context, i Interaction, result *InteractionResult) (*InteractionResult, error)
 }

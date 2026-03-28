@@ -1,17 +1,14 @@
 package grasp
 
 import (
-	"github.com/KKKKKKKEM/flowkit/builtin/serve"
-	"github.com/KKKKKKKEM/flowkit/core"
+	"github.com/KKKKKKKEM/flowkit/server"
+	"github.com/KKKKKKKEM/flowkit/server/sse"
 	"github.com/gin-gonic/gin"
 )
 
 func (p *Pipeline) GinRegister(r gin.IRouter) gin.IRouter {
-	serve.SSE(r, "/run", serve.SSEConfig[*Task, *Report]{
-		App: serve.Func(p.Invoke),
-		OnStart: func(sess *serve.SSESession, rc *core.Context, _ *Task) {
-			rc.WithReporter(NewSSEReporter(sess))
-		},
+	sse.SSE(r, "/grasp", sse.Config[*Task, *Report]{
+		App: server.Func(p.Invoke),
 	})
 	return r
 }

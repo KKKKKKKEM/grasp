@@ -5,15 +5,15 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/KKKKKKKEM/flowkit/builtin/download"
-	"github.com/KKKKKKKEM/flowkit/builtin/extract"
 	"github.com/KKKKKKKEM/flowkit/core"
+	"github.com/KKKKKKKEM/flowkit/x/download"
+	"github.com/KKKKKKKEM/flowkit/x/extract"
 	"github.com/KKKKKKKEM/flowkit/x/grasp"
 	"github.com/KKKKKKKEM/flowkit/x/grasp/sites/pexels"
 )
 
 func main() {
-	reporter := grasp.NewMpbReporter()
+	trackerProvider := grasp.NewMPBTrackerProvider()
 
 	extractor := extract.NewStage("extractor")
 	extractor.Mount(&pexels.APIParser{})
@@ -23,8 +23,8 @@ func main() {
 	p := grasp.NewGraspPipeline(
 		grasp.WithExtractor(extractor),
 		grasp.WithDownloader(downloader),
-		grasp.WithPlugin(grasp.CLISelectPlugin{}),
-		//grasp.WithProgress(reporter),
+		grasp.WithPlugin(&grasp.CLIInteractionPlugin{}),
+		grasp.WithTrackerProvider(trackerProvider),
 	)
 
 	task := &grasp.Task{
@@ -39,12 +39,12 @@ func main() {
 	}
 
 	rc := core.NewContext(context.Background(), "pexels-example")
-	rc.WithReporter(reporter)
+	rc.WithTrackerProvider(trackerProvider)
 	rc.WithValue("task", task)
 
 	runReport, err := p.Run(rc, "grasp")
 
-	reporter.Wait()
+	trackerProvider.Wait()
 
 	if err != nil {
 		log.Fatalf("pipeline failed: %v", err)

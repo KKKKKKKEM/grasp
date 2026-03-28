@@ -1,15 +1,13 @@
-package serve
+package sse
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/KKKKKKKEM/flowkit/core"
+	"github.com/KKKKKKKEM/flowkit/server"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 const (
@@ -22,47 +20,46 @@ type answerRequest struct {
 	Result        core.InteractionResult `json:"result"`
 }
 
-type SSEConfig[Req, Resp any] struct {
-	App      core.App[Req, Resp]
-	Store    *SSESessionStore
-	BuildReq func(*gin.Context) (Req, error)
-	OnStart  func(*SSESession, *core.Context, Req)
+type Config[Req, Resp any] struct {
+	App                           core.App[Req, Resp]
+	Store                         *SessionStore
+	BuildReq                      func(*gin.Context) (Req, error)
+	OnStart                       func(*Session, *core.Context, Req)
+	DisableInnerTrackerProvider   bool
+	DisableInnerInteractionPlugin bool
 }
 
-func SSE[Req, Resp any](r gin.IRouter, path string, cfg SSEConfig[Req, Resp]) {
+func SSE[Req, Resp any](r gin.IRouter, path string, cfg Config[Req, Resp]) {
 	store := cfg.Store
 	if store == nil {
 		store = DefaultSSESessionStore()
 	}
 	buildReq := cfg.BuildReq
 	if buildReq == nil {
-		buildReq = defaultBuildReq[Req]
+		buildReq = server.DefaultBuildReq[Req]
 	}
 
-	r.POST(path, func(c *gin.Context) {
-		lastSeq := int64(0)
+	r.POST(path+"/stream", func(c *gin.Context) {
+		var (
+			sseSession *Session
+			exists     bool
+			lastSeq    int64
+			err        error
+		)
+
 		if v := c.GetHeader(lastEventIDKey); v != "" {
 			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 				lastSeq = n
 			}
 		}
 
-		sessionID := c.GetHeader(sessionIDKey)
-
-		var (
-			sess   *SSESession
-			exists bool
-		)
-		if sessionID != "" {
-			sess, exists = store.Get(sessionID)
-		}
-		if sess == nil {
-			sessionID = uuid.NewString()
-			sess = store.Create(sessionID)
-			exists = false
+		sseSession, exists, err = store.GetOrCreate(c.GetHeader(sessionIDKey))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
 
-		ch, unsub := sess.subscribe(lastSeq)
+		ch, unsub := sseSession.subscribe(lastSeq)
 		defer unsub()
 
 		if !exists {
@@ -73,25 +70,30 @@ func SSE[Req, Resp any](r gin.IRouter, path string, cfg SSEConfig[Req, Resp]) {
 			}
 
 			go func() {
-				rc := core.NewContext(context.Background(), sessionID)
-				rc.WithSuspend(func(i core.Interaction) (core.InteractionResult, error) {
-					return sess.suspend(uuid.NewString(), i)
-				})
+				rc := core.NewContext(context.Background(), sseSession.ID)
+				if !cfg.DisableInnerTrackerProvider {
+					rc.WithTrackerProvider(NewSSETrackerProvider(sseSession))
+				}
+
+				if !cfg.DisableInnerInteractionPlugin {
+					rc.WithInteractionPlugin(NewSSEInteractionPlugin(sseSession))
+
+				}
 
 				if cfg.OnStart != nil {
-					cfg.OnStart(sess, rc, req)
+					cfg.OnStart(sseSession, rc, req)
 				}
 
 				resp, err := cfg.App.Invoke(rc, req)
 
-				sess.mu.Lock()
-				sess.done = true
-				sess.mu.Unlock()
+				sseSession.mu.Lock()
+				sseSession.done = true
+				sseSession.mu.Unlock()
 
 				if err != nil {
-					sess.emit(SSEError, gin.H{"message": err.Error()})
+					sseSession.Emit(Error, gin.H{"message": err.Error()})
 				} else {
-					sess.emit(SSEDone, resp)
+					sseSession.Emit(Done, resp)
 				}
 			}()
 		}
@@ -100,8 +102,8 @@ func SSE[Req, Resp any](r gin.IRouter, path string, cfg SSEConfig[Req, Resp]) {
 		c.Header("Cache-Control", "no-cache")
 		c.Header("Connection", "keep-alive")
 		c.Header("X-Accel-Buffering", "no")
-
-		writeSSEEvent(c, SSEEvent{Seq: 0, Type: SSEEventSession, Data: gin.H{"session_id": sessionID}})
+		event := Event{Seq: 0, Type: EventSession, Data: gin.H{sessionIDKey: sseSession.ID}}
+		event.write(c)
 		c.Writer.Flush()
 
 		ctx := c.Request.Context()
@@ -113,10 +115,10 @@ func SSE[Req, Resp any](r gin.IRouter, path string, cfg SSEConfig[Req, Resp]) {
 				if !ok {
 					return
 				}
-				writeSSEEvent(c, e)
+				e.write(c)
 				c.Writer.Flush()
-				if e.Type == SSEDone || e.Type == SSEError {
-					store.Delete(sessionID)
+				if e.Type == Done || e.Type == Error {
+					store.Delete(sseSession.ID)
 					return
 				}
 			}
@@ -149,9 +151,4 @@ func SSE[Req, Resp any](r gin.IRouter, path string, cfg SSEConfig[Req, Resp]) {
 
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
-}
-
-func writeSSEEvent(c *gin.Context, e SSEEvent) {
-	b, _ := json.Marshal(e.Data)
-	fmt.Fprintf(c.Writer, "id: %d\nevent: %s\ndata: %s\n\n", e.Seq, e.Type, b)
 }

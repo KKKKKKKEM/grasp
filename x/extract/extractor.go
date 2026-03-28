@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/KKKKKKKEM/flowkit/builtin/download"
+	"github.com/KKKKKKKEM/flowkit/x/download"
 )
 
 type Opts struct {

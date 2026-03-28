@@ -5,10 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KKKKKKKEM/flowkit/builtin/download"
-	"github.com/KKKKKKKEM/flowkit/builtin/extract"
 	"github.com/KKKKKKKEM/flowkit/core"
 	"github.com/KKKKKKKEM/flowkit/pipeline"
+	"github.com/KKKKKKKEM/flowkit/x/download"
+	"github.com/KKKKKKKEM/flowkit/x/extract"
 	"github.com/google/uuid"
 )
 
@@ -22,12 +22,12 @@ type Report struct {
 
 type Pipeline struct {
 	*pipeline.LinearPipeline
-	extractor        *extract.Stage
-	downloader       *download.DirectDownloadStage
-	defaultSelector  SelectFunc
-	defaultTransform TransformFunc
-	reporter         core.ProgressReporter
-	plugin           core.InteractionPlugin
+	extractor         *extract.Stage
+	downloader        *download.DirectDownloadStage
+	defaultSelector   SelectFunc
+	defaultTransform  TransformFunc
+	trackerProvider   core.TrackerProvider
+	interactionPlugin core.InteractionPlugin
 }
 
 var _ core.Pipeline = (*Pipeline)(nil)
@@ -124,18 +124,64 @@ func (p *Pipeline) run(rc *core.Context, task *Task) (*Report, error) {
 }
 
 func (p *Pipeline) selectItems(rc *core.Context, task *Task, items []extract.ParseItem) ([]extract.ParseItem, error) {
-	if p.plugin != nil {
-		i := core.Interaction{Type: InteractionTypeSelect, Payload: items}
-		if err := p.plugin.Interact(rc, i); err != nil {
+	if p.interactionPlugin != nil {
+		i := core.Interaction{Type: core.InteractionTypeSelect, Payload: items, Message: "Please select items to download"}
+		interactionPlugin := rc.InteractionPlugin()
+		if interactionPlugin == nil {
+			interactionPlugin = p.interactionPlugin
+		}
+
+		var indices []int
+
+		result, err := interactionPlugin.Interact(rc, i)
+		if err != nil {
 			return nil, err
 		}
-		if selected, ok := rc.Values["selected_items"].([]extract.ParseItem); ok {
-			return selected, nil
+
+		result, err = interactionPlugin.FormatResult(rc, i, result)
+		if err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("plugin did not inject selected_items into rc")
+
+		indices, err = toIntSlice(result.Answer)
+		if err != nil {
+			return nil, fmt.Errorf("select interaction: invalid answer: %w", err)
+		}
+
+		if len(indices) == 0 {
+			return nil, fmt.Errorf("no items selected")
+		}
+
+		var selected []extract.ParseItem
+
+		for _, index := range indices {
+			selected = append(selected, items[index])
+		}
+
+		return selected, nil
+
 	}
 
 	return task.resolveSelector(p.defaultSelector)(rc, items)
+}
+
+func toIntSlice(v any) ([]int, error) {
+	switch val := v.(type) {
+	case []int:
+		return val, nil
+	case []any:
+		out := make([]int, 0, len(val))
+		for _, item := range val {
+			f, ok := item.(float64)
+			if !ok {
+				return nil, fmt.Errorf("expected number, got %T", item)
+			}
+			out = append(out, int(f))
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected []int or []any, got %T", v)
+	}
 }
 
 func (p *Pipeline) runExtract(rc *core.Context, task *Task) ([]extract.ParseItem, int, error) {
@@ -227,9 +273,9 @@ func (p *Pipeline) buildDownloadTasks(rc *core.Context, items []extract.ParseIte
 	transformFn := task.resolveTransform(p.defaultTransform)
 	baseOpts := task.toDownloadOpts()
 
-	reporter := rc.Reporter()
-	if reporter == nil {
-		reporter = p.reporter
+	trackerBuilder := rc.TrackerProvider()
+	if trackerBuilder == nil {
+		trackerBuilder = p.trackerProvider
 	}
 
 	tasks := make([]*download.Task, 0, len(items))
@@ -238,12 +284,12 @@ func (p *Pipeline) buildDownloadTasks(rc *core.Context, items []extract.ParseIte
 		if err != nil {
 			return nil, fmt.Errorf("transform %q: %w", item.URI, err)
 		}
-		if reporter != nil {
+		if trackerBuilder != nil {
 			key := item.URI
 			if item.Name != "" {
 				key = item.Name
 			}
-			tracker := reporter.Track(key, 0)
+			tracker := trackerBuilder.Track(key, map[string]any{"total": 0})
 			bridgeDownloadTask(t, tracker)
 		}
 		tasks = append(tasks, t)
@@ -262,4 +308,23 @@ func (p *Pipeline) runDownload(rc *core.Context, tasks []*download.Task) ([]*dow
 
 	results, _ := sr.Outputs["download_results"].([]*download.Result)
 	return results, nil
+}
+
+func bridgeDownloadTask(task *download.Task, tracker core.Tracker) {
+	origProgress := task.OnProgress
+	task.OnProgress = func(downloaded, total int64) {
+		tracker.Update(map[string]any{"current": downloaded, "total": total})
+		tracker.Flush()
+		if origProgress != nil {
+			origProgress(downloaded, total)
+		}
+	}
+
+	origComplete := task.OnComplete
+	task.OnComplete = func(result *download.Result) {
+		tracker.Done()
+		if origComplete != nil {
+			origComplete(result)
+		}
+	}
 }

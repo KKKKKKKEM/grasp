@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/KKKKKKKEM/flowkit/builtin/download"
-	"github.com/KKKKKKKEM/flowkit/builtin/extract"
+	"github.com/KKKKKKKEM/flowkit/x/download"
+	"github.com/KKKKKKKEM/flowkit/x/extract"
 	"github.com/KKKKKKKEM/flowkit/x/grasp"
 	"github.com/KKKKKKKEM/flowkit/x/grasp/sites/pexels"
 )
@@ -18,7 +18,6 @@ func main() {
 	p := grasp.NewGraspPipeline(
 		grasp.WithExtractor(extractor),
 		grasp.WithDownloader(downloader),
-		grasp.WithPlugin(grasp.WebSelectPlugin{}),
 	)
 
 	log.Println("listening on :8080")
