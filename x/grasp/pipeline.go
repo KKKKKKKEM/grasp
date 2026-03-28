@@ -9,6 +9,7 @@ import (
 	"github.com/KKKKKKKEM/flowkit/pipeline"
 	"github.com/KKKKKKKEM/flowkit/x/download"
 	"github.com/KKKKKKKEM/flowkit/x/extract"
+	"github.com/KKKKKKKEM/flowkit/x/grasp/sites/pexels"
 	"github.com/google/uuid"
 )
 
@@ -33,7 +34,19 @@ type Pipeline struct {
 var _ core.Pipeline = (*Pipeline)(nil)
 
 func NewGraspPipeline(opts ...Option) *Pipeline {
-	p := &Pipeline{LinearPipeline: pipeline.NewLinearPipeline()}
+	trackerProvider := NewMPBTrackerProvider()
+
+	extractor := extract.NewStage("extractor")
+	extractor.Mount(&pexels.APIParser{})
+
+	downloader := download.NewStage("download")
+	p := &Pipeline{
+		LinearPipeline:    pipeline.NewLinearPipeline(),
+		extractor:         extractor,
+		downloader:        downloader,
+		trackerProvider:   trackerProvider,
+		interactionPlugin: &CLIInteractionPlugin{},
+	}
 	for _, opt := range opts {
 		opt(p)
 	}
@@ -327,4 +340,12 @@ func bridgeDownloadTask(task *download.Task, tracker core.Tracker) {
 			origComplete(result)
 		}
 	}
+}
+
+func NewPipeline(opts ...Option) *Pipeline {
+	p := &Pipeline{LinearPipeline: pipeline.NewLinearPipeline()}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }

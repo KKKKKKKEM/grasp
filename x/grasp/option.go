@@ -43,3 +43,9 @@ func WithPlugin(plugin core.InteractionPlugin) Option {
 		p.interactionPlugin = plugin
 	}
 }
+
+func WithExtractors(extractors ...extract.Extractor) Option {
+	return func(p *Pipeline) {
+		p.extractor.Mount(extractors...)
+	}
+}
