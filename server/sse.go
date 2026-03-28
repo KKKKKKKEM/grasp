@@ -23,7 +23,7 @@ type answerRequest struct {
 type Config[Req, Resp any] struct {
 	App                           core.App[Req, Resp]
 	Store                         *sse.SessionStore
-	BuildReq                      func(*gin.Context) (Req, error)
+	Builder                       func(*gin.Context) (Req, error)
 	OnStart                       func(*sse.Session, *core.Context, Req)
 	DisableInnerTrackerProvider   bool
 	DisableInnerInteractionPlugin bool
@@ -34,9 +34,9 @@ func SSE[Req, Resp any](r gin.IRouter, path string, cfg Config[Req, Resp]) {
 	if store == nil {
 		store = sse.DefaultSSESessionStore()
 	}
-	buildReq := cfg.BuildReq
-	if buildReq == nil {
-		buildReq = DefaultBuildReq[Req]
+	builder := cfg.Builder
+	if builder == nil {
+		builder = DefaultBuildReq[Req]
 	}
 
 	r.POST(path+"/stream", func(c *gin.Context) {
@@ -63,7 +63,7 @@ func SSE[Req, Resp any](r gin.IRouter, path string, cfg Config[Req, Resp]) {
 		defer unsub()
 
 		if isNew {
-			req, err := buildReq(c)
+			req, err := builder(c)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return

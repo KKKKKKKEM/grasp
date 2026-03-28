@@ -5,20 +5,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/KKKKKKKEM/flowkit/cli"
 )
 
-func (p *Pipeline) CLI() error {
-	return cli.Run(cli.Config[*Task, *Report]{
-		App:               cli.Func(p.Invoke),
-		BuildReq:          buildTaskFromArgs,
-		TrackerProvider:   NewMPBTrackerProvider(),
-		InteractionPlugin: &CLIInteractionPlugin{},
-	})
-}
-
-func buildTaskFromArgs(args []string) (*Task, error) {
+func buildCLI(args []string) (*Task, error) {
 	fs := flag.NewFlagSet("grasp", flag.ContinueOnError)
 
 	var (

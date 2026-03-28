@@ -5,13 +5,12 @@ import (
 	"sync"
 	"time"
 
+	flowkit "github.com/KKKKKKKEM/flowkit"
 	"github.com/KKKKKKKEM/flowkit/core"
 	"github.com/KKKKKKKEM/flowkit/pipeline"
-	"github.com/KKKKKKKEM/flowkit/server"
 	"github.com/KKKKKKKEM/flowkit/x/download"
 	"github.com/KKKKKKKEM/flowkit/x/extract"
 	"github.com/KKKKKKKEM/flowkit/x/grasp/sites/pexels"
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
@@ -24,20 +23,19 @@ type Report struct {
 }
 
 type Pipeline struct {
+	flowkit.App[*Task, *Report]
 	*pipeline.LinearPipeline
 	extractor         *extract.Stage
 	downloader        *download.DirectDownloadStage
 	defaultSelector   SelectFunc
 	defaultTransform  TransformFunc
-	trackerProvider   core.TrackerProvider
 	interactionPlugin core.InteractionPlugin
+	trackerProvider   core.TrackerProvider
 }
 
 var _ core.Pipeline = (*Pipeline)(nil)
 
 func NewGraspPipeline(opts ...Option) *Pipeline {
-	trackerProvider := NewMPBTrackerProvider()
-
 	extractor := extract.NewStage("extractor")
 	extractor.Mount(&pexels.APIParser{})
 
@@ -46,13 +44,26 @@ func NewGraspPipeline(opts ...Option) *Pipeline {
 		LinearPipeline:    pipeline.NewLinearPipeline(),
 		extractor:         extractor,
 		downloader:        downloader,
-		trackerProvider:   trackerProvider,
+		trackerProvider:   NewMPBTrackerProvider(),
 		interactionPlugin: &CLIInteractionPlugin{},
 	}
 	for _, opt := range opts {
 		opt(p)
 	}
+	p.App = flowkit.NewApp(p.Invoke)
 	return p
+}
+
+func (p *Pipeline) CLI(opts ...flowkit.CLIOption[*Task, *Report]) error {
+	return p.App.CLI(append([]flowkit.CLIOption[*Task, *Report]{
+		flowkit.WithCLIBuilder[*Task, *Report](buildCLI),
+		flowkit.WithTrackerProvider[*Task, *Report](p.trackerProvider),
+		flowkit.WithInteractionPlugin[*Task, *Report](p.interactionPlugin),
+	}, opts...)...)
+}
+
+func (p *Pipeline) Serve(addr string, opts ...flowkit.ServeOption[*Task, *Report]) error {
+	return p.App.Serve(addr, opts...)
 }
 
 func (p *Pipeline) Run(rc *core.Context, _ string) (*core.Report, error) {
@@ -342,20 +353,4 @@ func bridgeDownloadTask(task *download.Task, tracker core.Tracker) {
 			origComplete(result)
 		}
 	}
-}
-
-func (p *Pipeline) Serve(addr string) error {
-	engine := gin.Default()
-	server.SSE(engine, "/grasp", server.Config[*Task, *Report]{
-		App: server.Func(p.Invoke),
-	})
-	return engine.Run(addr)
-}
-
-func NewPipeline(opts ...Option) *Pipeline {
-	p := &Pipeline{LinearPipeline: pipeline.NewLinearPipeline()}
-	for _, opt := range opts {
-		opt(p)
-	}
-	return p
 }

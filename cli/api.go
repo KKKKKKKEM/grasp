@@ -16,7 +16,7 @@ func Func[Req, Resp any](fn func(*core.Context, Req) (Resp, error)) core.App[Req
 
 type Config[Req, Resp any] struct {
 	App               core.App[Req, Resp]
-	BuildReq          func(args []string) (Req, error)
+	Builder           func(args []string) (Req, error)
 	OnResult          func(resp Resp)
 	OnError           func(err error)
 	TrackerProvider   core.TrackerProvider
@@ -28,7 +28,7 @@ func Run[Req, Resp any](cfg Config[Req, Resp]) error {
 	if onResult == nil {
 		onResult = func(resp Resp) {
 			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", "  ")
+			//enc.SetIndent("", "  ")
 			_ = enc.Encode(resp)
 		}
 	}
@@ -41,7 +41,7 @@ func Run[Req, Resp any](cfg Config[Req, Resp]) error {
 		}
 	}
 
-	req, err := cfg.BuildReq(os.Args[1:])
+	req, err := cfg.Builder(os.Args[1:])
 	if err != nil {
 		onError(fmt.Errorf("build request: %w", err))
 		return err
