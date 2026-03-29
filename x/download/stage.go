@@ -73,7 +73,7 @@ func (s *DirectDownloadStage) loadTasks(rc *core.Context) ([]*Task, error) {
 		inputKey = "tasks"
 	}
 
-	val, ok := rc.Values[inputKey]
+	val, ok := rc.Get(inputKey)
 	if !ok {
 		return nil, fmt.Errorf("task not found in rc.Values[%q]", inputKey)
 	}

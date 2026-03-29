@@ -34,11 +34,12 @@ func (e *ErrInteractionRequired) Error() string {
 const interactionKey = "__interaction__"
 
 func (rc *Context) WithInteractionPlugin(plugin InteractionPlugin) {
-	rc.Values[interactionKey] = plugin
+	rc.Set(interactionKey, plugin)
 }
 
 func (rc *Context) InteractionPlugin() InteractionPlugin {
-	plugin, _ := rc.Values[interactionKey].(InteractionPlugin)
+	v, _ := rc.Get(interactionKey)
+	plugin, _ := v.(InteractionPlugin)
 	return plugin
 }
 

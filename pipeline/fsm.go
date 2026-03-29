@@ -82,9 +82,7 @@ func (fp *FSMPipeline) Run(rc *core.Context, entry string) (*core.Report, error)
 		report.StageResults[name] = result
 
 		// 合并输出到共享状态
-		for k, v := range result.Outputs {
-			rc.Values[k] = v
-		}
+		rc.Merge(result.Outputs)
 
 		if result.IsFailed() {
 			report.Success = false

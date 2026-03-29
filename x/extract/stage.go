@@ -39,7 +39,7 @@ func (s *Stage) loadTask(rc *core.Context) (*Task, error) {
 		inputKey = "task"
 	}
 
-	if val, ok := rc.Values[inputKey]; ok {
+	if val, ok := rc.Get(inputKey); ok {
 		if t, ok := val.(*Task); ok {
 			task = t
 		}

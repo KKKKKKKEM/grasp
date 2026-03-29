@@ -75,7 +75,8 @@ func (p *Pipeline) Run(rc *core.Context, _ string) (*core.Report, error) {
 	}
 	start := time.Now()
 
-	task, ok := rc.Values["task"].(*Task)
+	v, ok := rc.Get("task")
+	task, ok := v.(*Task)
 	if !ok {
 		return fail(report, start, fmt.Errorf("rc.Values[\"task\"] missing or wrong type"))
 	}
@@ -95,7 +96,7 @@ func (p *Pipeline) Run(rc *core.Context, _ string) (*core.Report, error) {
 }
 
 func (p *Pipeline) Invoke(rc *core.Context, task *Task) (*Report, error) {
-	rc.WithValue("task", task)
+	rc.Set("task", task)
 	runReport, err := p.Run(rc, "grasp")
 	if err != nil {
 		return nil, err
@@ -150,6 +151,9 @@ func (p *Pipeline) run(rc *core.Context, task *Task) (*Report, error) {
 }
 
 func (p *Pipeline) selectItems(rc *core.Context, task *Task, items []extract.ParseItem) ([]extract.ParseItem, error) {
+	if task.Selector != nil {
+		return task.Selector(rc, items)
+	}
 
 	i := core.Interaction{Type: core.InteractionTypeSelect, Payload: items, Message: "Please select items to download"}
 	interactionPlugin := rc.InteractionPlugin()
@@ -174,7 +178,6 @@ func (p *Pipeline) selectItems(rc *core.Context, task *Task, items []extract.Par
 		}
 	} else {
 		return task.resolveSelector(p.defaultSelector)(rc, items)
-
 	}
 
 	if len(indices) == 0 {
@@ -263,8 +266,8 @@ func (p *Pipeline) extractRound(
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			child := core.NewContext(rc, uuid.NewString())
-			child.WithValue("task", &extract.Task{
+			child := rc.Fork(uuid.NewString())
+			child.Set("task", &extract.Task{
 				URL:          u,
 				Opts:         opts,
 				ForcedParser: forcedParser,
@@ -324,8 +327,8 @@ func (p *Pipeline) buildDownloadTasks(rc *core.Context, items []extract.ParseIte
 }
 
 func (p *Pipeline) runDownload(rc *core.Context, tasks []*download.Task) ([]*download.Result, error) {
-	child := core.NewContext(rc, uuid.NewString())
-	child.WithValue("tasks", tasks)
+	child := rc.Fork(uuid.NewString())
+	child.Set("tasks", tasks)
 
 	sr := p.downloader.Run(child)
 	if sr.IsFailed() {
