@@ -1,4 +1,4 @@
-package serve
+package server
 
 import (
 	"net/http"
@@ -17,7 +17,7 @@ type HTTPConfig[Req, Resp any] struct {
 func HTTP[Req, Resp any](r gin.IRouter, path string, cfg HTTPConfig[Req, Resp]) {
 	buildReq := cfg.BuildReq
 	if buildReq == nil {
-		buildReq = defaultBuildReq[Req]
+		buildReq = DefaultBuildReq[Req]
 	}
 
 	r.POST(path, func(c *gin.Context) {

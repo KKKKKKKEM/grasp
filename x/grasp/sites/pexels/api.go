@@ -6,8 +6,8 @@ import (
 	"io"
 	"regexp"
 
-	download2 "github.com/KKKKKKKEM/flowkit/builtin/download"
-	"github.com/KKKKKKKEM/flowkit/builtin/extract"
+	"github.com/KKKKKKKEM/flowkit/x/download"
+	"github.com/KKKKKKKEM/flowkit/x/extract"
 	"github.com/tidwall/gjson"
 )
 
@@ -31,8 +31,8 @@ func (p *APIParser) Handlers() []*extract.Parser {
 
 func (p *APIParser) ParseImageAPI(ctx context.Context, task *extract.Task, opts *extract.Opts) ([]extract.ParseItem, error) {
 
-	httpClient := &download2.HttpClient{}
-	request, err := download2.NewRequest("GET", task.URL, task.Headers)
+	httpClient := &download.HttpClient{}
+	request, err := download.NewRequest("GET", task.URL, task.Headers)
 	if err != nil {
 		return nil, err
 	}

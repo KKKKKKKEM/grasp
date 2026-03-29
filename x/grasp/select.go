@@ -3,8 +3,8 @@ package grasp
 import (
 	"context"
 
-	"github.com/KKKKKKKEM/flowkit/builtin/download"
-	"github.com/KKKKKKKEM/flowkit/builtin/extract"
+	"github.com/KKKKKKKEM/flowkit/x/download"
+	"github.com/KKKKKKKEM/flowkit/x/extract"
 )
 
 type SelectFunc func(ctx context.Context, items []extract.ParseItem) ([]extract.ParseItem, error)

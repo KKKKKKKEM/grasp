@@ -1,9 +1,9 @@
 package grasp
 
 import (
-	"github.com/KKKKKKKEM/flowkit/builtin/download"
-	"github.com/KKKKKKKEM/flowkit/builtin/extract"
 	"github.com/KKKKKKKEM/flowkit/core"
+	"github.com/KKKKKKKEM/flowkit/x/download"
+	"github.com/KKKKKKKEM/flowkit/x/extract"
 )
 
 type Option func(*Pipeline)
@@ -32,14 +32,20 @@ func WithTransform(fn TransformFunc) Option {
 	}
 }
 
-func WithProgress(r core.ProgressReporter) Option {
+func WithTrackerProvider(r core.TrackerProvider) Option {
 	return func(p *Pipeline) {
-		p.reporter = r
+		p.trackerProvider = r
 	}
 }
 
 func WithPlugin(plugin core.InteractionPlugin) Option {
 	return func(p *Pipeline) {
-		p.plugin = plugin
+		p.interactionPlugin = plugin
+	}
+}
+
+func WithExtractors(extractors ...extract.Extractor) Option {
+	return func(p *Pipeline) {
+		p.extractor.Mount(extractors...)
 	}
 }
