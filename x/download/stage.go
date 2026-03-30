@@ -8,17 +8,19 @@ import (
 )
 
 type batchResult struct {
+	idx    int
 	task   *Task
 	result *Result
 	err    error
 }
 
-type DirectDownloadStage struct {
+type Stage struct {
+	*core.TypedStageAdapter[[]*Task, []*Result]
 	stageName string
 	opts      stageOptions
 }
 
-func (s *DirectDownloadStage) Name() string {
+func (s *Stage) Name() string {
 	return s.stageName
 }
 
@@ -50,104 +52,85 @@ func applyFallback(task *Task, fb *Opts, headers map[string]string) {
 	}
 }
 
-func (s *DirectDownloadStage) Run(rc *core.Context) core.StageResult {
-	tasks, err := s.loadTasks(rc)
-	if err != nil {
-		return core.StageResult{Status: core.StageFailed, Err: err}
+func (s *Stage) Exec(rc *core.Context, in []*Task) (result core.TypedResult[[]*Result], err error) {
+	result.Next = s.opts.nextStageName
+
+	for _, task := range in {
+		applyFallback(task, &s.opts.fallback, s.opts.headers)
 	}
 
-	o := s.opts
-	for _, task := range tasks {
-		applyFallback(task, &o.fallback, o.headers)
+	if len(in) == 1 {
+		var one *Result
+		one, err = s.downloadOne(rc, in[0])
+		if err != nil {
+			return
+		}
+		result.Output = []*Result{one}
+		return
 	}
 
-	if len(tasks) == 1 {
-		return s.downloadOne(rc, tasks[0])
-	}
-	return s.downloadBatch(rc, tasks)
+	result.Output, err = s.downloadBatch(rc, in)
+	return
 }
 
-func (s *DirectDownloadStage) loadTasks(rc *core.Context) ([]*Task, error) {
-	inputKey := s.opts.inputKey
-	if inputKey == "" {
-		inputKey = "tasks"
-	}
-
-	val, ok := rc.State.Get(inputKey)
-	if !ok {
-		return nil, fmt.Errorf("task not found in rc.State[%q]", inputKey)
-	}
-
-	switch v := val.(type) {
-	case []*Task:
-		return v, nil
-	case *Task:
-		return []*Task{v}, nil
-	default:
-		return nil, fmt.Errorf("rc.State[%q] must be *Task or []*Task, got %T", inputKey, val)
-	}
-}
-
-func (s *DirectDownloadStage) downloadOne(rc *core.Context, task *Task) core.StageResult {
+func (s *Stage) downloadOne(rc *core.Context, task *Task) (*Result, error) {
 	dl := NewHTTPDownloader()
 	result, err := dl.Download(rc, task)
 	if err != nil {
-		return core.StageResult{Status: core.StageFailed, Err: err}
+		return nil, err
 	}
 	if task.OnComplete != nil {
 		task.OnComplete(result)
 	}
-	return core.StageResult{
-		Status:  core.StageSuccess,
-		Next:    s.opts.nextStageName,
-		Outputs: map[string]any{"download_results": []*Result{result}},
-	}
+	return result, nil
 }
 
-func (s *DirectDownloadStage) downloadBatch(rc *core.Context, tasks []*Task) core.StageResult {
+func (s *Stage) downloadBatch(rc *core.Context, tasks []*Task) ([]*Result, error) {
 	resultsCh := make(chan batchResult, len(tasks))
 	var wg sync.WaitGroup
 
-	for _, task := range tasks {
+	for idx, task := range tasks {
 		wg.Add(1)
-		go func(t *Task) {
+		go func(i int, t *Task) {
 			defer wg.Done()
 			dl := NewHTTPDownloader()
 			res, err := dl.Download(rc, t)
 			if err == nil && t.OnComplete != nil {
 				t.OnComplete(res)
 			}
-			resultsCh <- batchResult{task: t, result: res, err: err}
-		}(task)
+			resultsCh <- batchResult{idx: i, task: t, result: res, err: err}
+		}(idx, task)
 	}
 
 	wg.Wait()
 	close(resultsCh)
 
-	var results []*Result
+	results := make([]*Result, len(tasks))
 	for br := range resultsCh {
 		if br.err != nil {
-			return core.StageResult{
-				Status: core.StageFailed,
-				Err:    fmt.Errorf("download failed for %s: %w", br.task.Request.URL, br.err),
-			}
+			return nil, fmt.Errorf("download failed for %s: %w", br.task.Request.URL, br.err)
 		}
-		results = append(results, br.result)
+		results[br.idx] = br.result
 	}
 
-	return core.StageResult{
-		Status:  core.StageSuccess,
-		Next:    s.opts.nextStageName,
-		Outputs: map[string]any{"download_results": results},
-	}
+	return results, nil
 }
 
-func NewStage(name string, options ...Option) *DirectDownloadStage {
-	s := &DirectDownloadStage{
+func NewStage(name string, options ...Option) *Stage {
+	s := &Stage{
 		stageName: name,
 	}
 	for _, opt := range options {
 		opt(&s.opts)
 	}
+	inputKey := "tasks"
+	outputKey := "results"
+
+	s.TypedStageAdapter = core.NewTypedStage[[]*Task, []*Result](
+		name,
+		inputKey,
+		outputKey,
+		s,
+	)
 	return s
 }

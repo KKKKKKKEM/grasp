@@ -3,7 +3,6 @@ package download
 type stageOptions struct {
 	fallback      Opts
 	headers       map[string]string
-	inputKey      string
 	nextStageName string
 }
 
@@ -19,10 +18,6 @@ func WithFallback(opts *Opts) Option {
 
 func WithFallbackHeaders(headers map[string]string) Option {
 	return func(o *stageOptions) { o.headers = headers }
-}
-
-func WithInputKey(inputKey string) Option {
-	return func(o *stageOptions) { o.inputKey = inputKey }
 }
 
 func WithNextStage(stageName string) Option {

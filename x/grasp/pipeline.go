@@ -26,7 +26,7 @@ type Pipeline struct {
 	flowkit.App[*Task, *Report]
 	*pipeline.LinearPipeline
 	extractor         *extract.Stage
-	downloader        *download.DirectDownloadStage
+	downloader        *download.Stage
 	defaultSelector   SelectFunc
 	defaultTransform  TransformFunc
 	interactionPlugin core.InteractionPlugin
@@ -328,15 +328,11 @@ func (p *Pipeline) buildDownloadTasks(rc *core.Context, items []extract.ParseIte
 
 func (p *Pipeline) runDownload(rc *core.Context, tasks []*download.Task) ([]*download.Result, error) {
 	child := rc.Fork(uuid.NewString())
-	child.State.Set("tasks", tasks)
-
-	sr := p.downloader.Run(child)
-	if sr.IsFailed() {
-		return nil, sr.Err
+	typed, err := p.downloader.Exec(child, tasks)
+	if err != nil {
+		return nil, err
 	}
-
-	results, _ := sr.Outputs["download_results"].([]*download.Result)
-	return results, nil
+	return typed.Output, nil
 }
 
 func bridgeDownloadTask(task *download.Task, tracker core.Tracker) {

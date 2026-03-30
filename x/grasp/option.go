@@ -14,7 +14,7 @@ func WithExtractor(e *extract.Stage) Option {
 	}
 }
 
-func WithDownloader(d *download.DirectDownloadStage) Option {
+func WithDownloader(d *download.Stage) Option {
 	return func(p *Pipeline) {
 		p.downloader = d
 	}
