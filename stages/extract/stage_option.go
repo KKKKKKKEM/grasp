@@ -1,18 +1,22 @@
 package extract
 
 type stageOptions struct {
-	fallback      Opts
+	defaults      Opts
 	nextStageName string
 }
 
 type Option func(*stageOptions)
 
-func WithFallback(opts *Opts) Option {
+func WithDefaults(opts *Opts) Option {
 	return func(o *stageOptions) {
 		if opts != nil {
-			o.fallback = *opts
+			o.defaults = *opts.Clone()
 		}
 	}
+}
+
+func WithFallback(opts *Opts) Option {
+	return WithDefaults(opts)
 }
 
 func WithNextStage(stageName string) Option {

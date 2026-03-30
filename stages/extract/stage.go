@@ -19,18 +19,19 @@ type Stage struct {
 func (s *Stage) Exec(rc *core.Context, in *Task) (result core.TypedResult[[]Item], err error) {
 	result.Next = s.opts.nextStageName
 
-	applyFallback(in, &s.opts.fallback)
-	parser := s.resolve(in.URL, in.ForcedParser)
+	resolvedTask := in.Clone()
+	resolvedTask.Opts = ResolveOpts(in.Opts, &s.opts.defaults)
+	parser := s.resolve(resolvedTask.URL, resolvedTask.ForcedParser)
 	if parser == nil {
-		err = fmt.Errorf("no parser matched URL: %s (forced: %s)", in.URL, in.ForcedParser)
+		err = fmt.Errorf("no parser matched URL: %s (forced: %s)", resolvedTask.URL, resolvedTask.ForcedParser)
 		return
 	}
-	items, err := parser.Parse(rc, in, in.Opts)
+	items, err := parser.Parse(rc, resolvedTask, resolvedTask.Opts)
 	if err != nil {
 		return
 	}
-	if in.OnItems != nil {
-		in.OnItems(0, items)
+	if resolvedTask.OnItems != nil {
+		resolvedTask.OnItems(0, items)
 	}
 	result.Output = items
 
@@ -61,32 +62,6 @@ func (s *Stage) Mount(extractors ...Extractor) *Stage {
 }
 
 func (s *Stage) Name() string { return s.stageName }
-
-// applyFallback 将 fb 中的非零值填充到 task.Opts，header 仅补充不覆盖。
-func applyFallback(task *Task, fb *Opts) {
-	if task.Opts == nil {
-		task.Opts = &Opts{}
-	}
-	if task.Opts.Proxy == "" {
-		task.Opts.Proxy = fb.Proxy
-	}
-	if task.Opts.Timeout == 0 {
-		task.Opts.Timeout = fb.Timeout
-	}
-	if task.Opts.Retry == 0 {
-		task.Opts.Retry = fb.Retry
-	}
-	if fb.Headers != nil {
-		if task.Opts.Headers == nil {
-			task.Opts.Headers = make(map[string]string)
-		}
-		for k, v := range fb.Headers {
-			if _, exists := task.Opts.Headers[k]; !exists {
-				task.Opts.Headers[k] = v
-			}
-		}
-	}
-}
 
 func (s *Stage) resolve(rawURL, forcedHint string) *Parser {
 	if forcedHint != "" {

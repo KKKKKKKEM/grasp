@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/KKKKKKKEM/flowkit/stages/download"
@@ -203,12 +203,22 @@ func (d *Downloader) Download(ctx context.Context, task *download.Task) (*downlo
 func (d *Downloader) runSegments(ctx context.Context, task *download.Task, f *os.File, meta *download.Meta, concurrency int) (int64, error) {
 	var (
 		wg       sync.WaitGroup
-		firstErr atomic.Value
+		firstErr error
+		errOnce  sync.Once
 	)
 	cmds := make(chan writeCmd)
 	segments := make(chan download.Segment)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	setFirstErr := func(err error) {
+		if err == nil || errors.Is(err, context.Canceled) {
+			return
+		}
+		errOnce.Do(func() {
+			firstErr = err
+			cancel()
+		})
+	}
 
 	saveTicker := time.NewTicker(time.Second)
 	defer saveTicker.Stop()
@@ -229,8 +239,7 @@ func (d *Downloader) runSegments(ctx context.Context, task *download.Task, f *os
 		go func() {
 			defer wg.Done()
 			if err := d.produceSegments(ctx, task, cmds, segments); err != nil {
-				firstErr.CompareAndSwap(nil, err)
-				cancel()
+				setFirstErr(err)
 			}
 		}()
 	}
@@ -263,10 +272,16 @@ func (d *Downloader) runSegments(ctx context.Context, task *download.Task, f *os
 	}
 
 	var written int64
+	var writeErr error
 	for cmd := range cmds {
+		if writeErr != nil {
+			continue
+		}
 		nw, err := f.WriteAt(cmd.buf, cmd.offset)
 		if err != nil {
-			return written, fmt.Errorf("write segment %d: %w", cmd.segIdx, err)
+			writeErr = fmt.Errorf("write segment %d: %w", cmd.segIdx, err)
+			setFirstErr(writeErr)
+			continue
 		}
 		written += int64(nw)
 
@@ -280,7 +295,9 @@ func (d *Downloader) runSegments(ctx context.Context, task *download.Task, f *os
 		select {
 		case <-saveTicker.C:
 			if err := flushMeta(); err != nil {
-				return written, err
+				writeErr = err
+				setFirstErr(err)
+				continue
 			}
 		default:
 		}
@@ -289,11 +306,14 @@ func (d *Downloader) runSegments(ctx context.Context, task *download.Task, f *os
 		}
 	}
 
+	if writeErr != nil {
+		return written, writeErr
+	}
 	if err := flushMeta(); err != nil {
 		return written, err
 	}
-	if v := firstErr.Load(); v != nil {
-		return 0, v.(error)
+	if firstErr != nil {
+		return 0, firstErr
 	}
 	return written, nil
 }

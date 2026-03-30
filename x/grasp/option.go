@@ -3,12 +3,12 @@ package grasp
 import (
 	"github.com/KKKKKKKEM/flowkit/core"
 	"github.com/KKKKKKKEM/flowkit/stages/download"
-	extract2 "github.com/KKKKKKKEM/flowkit/stages/extract"
+	"github.com/KKKKKKKEM/flowkit/stages/extract"
 )
 
 type Option func(*Pipeline)
 
-func WithExtractor(e *extract2.Stage) Option {
+func WithExtractor(e *extract.Stage) Option {
 	return func(p *Pipeline) {
 		p.extractor = e
 	}
@@ -44,7 +44,7 @@ func WithPlugin(plugin core.InteractionPlugin) Option {
 	}
 }
 
-func WithExtractors(extractors ...extract2.Extractor) Option {
+func WithExtractors(extractors ...extract.Extractor) Option {
 	return func(p *Pipeline) {
 		p.extractor.Mount(extractors...)
 	}

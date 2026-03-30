@@ -22,17 +22,19 @@ type Task struct {
 }
 
 type ExtractConfig struct {
-	MaxRounds    int
-	ForcedParser string
-	Concurrency  int
+	MaxRounds         int
+	ForcedParser      string
+	WorkerConcurrency int
 }
 
 type DownloadConfig struct {
-	Dest          string
-	Overwrite     bool
-	Concurrency   int
-	ChunkSize     int64
-	RetryInterval time.Duration
+	Dest               string
+	Overwrite          bool
+	TaskConcurrency    int
+	BestEffort         bool
+	SegmentConcurrency int
+	ChunkSize          int64
+	RetryInterval      time.Duration
 }
 
 func (t *Task) toExtractOpts() *extract.Opts {
@@ -51,7 +53,7 @@ func (t *Task) toDownloadOpts() *download.Opts {
 		Retry:         t.Retry,
 		Dest:          t.Download.Dest,
 		Overwrite:     t.Download.Overwrite,
-		Concurrency:   t.Download.Concurrency,
+		Concurrency:   t.Download.SegmentConcurrency,
 		ChunkSize:     t.Download.ChunkSize,
 		RetryInterval: t.Download.RetryInterval,
 	}

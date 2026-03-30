@@ -1,6 +1,7 @@
 package grasp
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -16,11 +17,21 @@ import (
 )
 
 type Report struct {
-	Success     bool               `json:"success"`
-	DurationMs  int64              `json:"duration_ms"`
-	Rounds      int                `json:"rounds"`
-	ParsedItems int                `json:"parsed_items"`
-	Downloaded  []*download.Result `json:"downloaded"`
+	Success           bool               `json:"success"`
+	Partial           bool               `json:"partial,omitempty"`
+	DurationMs        int64              `json:"duration_ms"`
+	Rounds            int                `json:"rounds"`
+	ParsedItems       int                `json:"parsed_items"`
+	Downloaded        []*download.Result `json:"downloaded"`
+	DownloadSucceeded int                `json:"download_succeeded,omitempty"`
+	DownloadFailed    int                `json:"download_failed,omitempty"`
+	DownloadFailures  []DownloadFailure  `json:"download_failures,omitempty"`
+}
+
+type DownloadFailure struct {
+	Index int    `json:"index"`
+	URI   string `json:"uri"`
+	Error string `json:"error"`
 }
 
 type Pipeline struct {
@@ -93,6 +104,16 @@ func (p *Pipeline) Run(rc *core.Context, _ string) (*core.Report, error) {
 
 	graspReport, err := p.Invoke(rc, task)
 	if err != nil {
+		if graspReport != nil {
+			report.StageResults["grasp"] = core.StageResult{
+				Status:  core.StageFailed,
+				Err:     err,
+				Outputs: map[string]any{"report": graspReport},
+			}
+			report.Success = false
+			report.DurationMs = time.Since(start).Milliseconds()
+			return report, err
+		}
 		return fail(report, start, err)
 	}
 
@@ -140,15 +161,56 @@ func (p *Pipeline) run(rc *core.Context, task *Task) (*Report, error) {
 		return nil, fmt.Errorf("transform: %w", err)
 	}
 
-	results, err := p.runDownload(rc, dlTasks)
+	results, err := p.runDownload(rc, task, dlTasks)
+	report.Downloaded = compactDownloadResults(results)
+	report.DownloadSucceeded = len(report.Downloaded)
 	if err != nil {
-		return nil, fmt.Errorf("download: %w", err)
+		var batchErr *download.BatchError
+		if errors.As(err, &batchErr) {
+			report.DownloadFailures = mapDownloadFailures(batchErr)
+			report.DownloadFailed = len(report.DownloadFailures)
+			report.Partial = report.DownloadSucceeded > 0
+			report.Success = task.Download.BestEffort && report.DownloadSucceeded > 0
+			report.DurationMs = time.Since(start).Milliseconds()
+			if task.Download.BestEffort {
+				return report, nil
+			}
+			return report, fmt.Errorf("download: %w", err)
+		}
+		return report, fmt.Errorf("download: %w", err)
 	}
 
-	report.Downloaded = results
 	report.Success = true
 	report.DurationMs = time.Since(start).Milliseconds()
 	return report, nil
+}
+
+func compactDownloadResults(results []*download.Result) []*download.Result {
+	if len(results) == 0 {
+		return nil
+	}
+	filtered := make([]*download.Result, 0, len(results))
+	for _, result := range results {
+		if result != nil {
+			filtered = append(filtered, result)
+		}
+	}
+	return filtered
+}
+
+func mapDownloadFailures(batchErr *download.BatchError) []DownloadFailure {
+	if batchErr == nil || len(batchErr.Failures) == 0 {
+		return nil
+	}
+	failures := make([]DownloadFailure, 0, len(batchErr.Failures))
+	for _, failure := range batchErr.Failures {
+		failures = append(failures, DownloadFailure{
+			Index: failure.Index,
+			URI:   failure.URI,
+			Error: failure.Err.Error(),
+		})
+	}
+	return failures
 }
 
 func (p *Pipeline) selectItems(rc *core.Context, task *Task, items []extract.Item) ([]extract.Item, error) {
@@ -219,9 +281,9 @@ func (p *Pipeline) runExtract(rc *core.Context, task *Task) ([]extract.Item, int
 	if maxRounds <= 0 {
 		maxRounds = 1
 	}
-	concurrency := task.Extract.Concurrency
-	if concurrency <= 0 {
-		concurrency = 1
+	extractConcurrency := task.Extract.WorkerConcurrency
+	if extractConcurrency <= 0 {
+		extractConcurrency = 1
 	}
 
 	extractOpts := task.toExtractOpts()
@@ -230,7 +292,7 @@ func (p *Pipeline) runExtract(rc *core.Context, task *Task) ([]extract.Item, int
 	copy(queue, task.URLs)
 
 	for round := 0; round < maxRounds && len(queue) > 0; round++ {
-		items, next, err := p.extractRound(rc, queue, task.Extract.ForcedParser, extractOpts, concurrency)
+		items, next, err := p.extractRound(rc, queue, task.Extract.ForcedParser, extractOpts, extractConcurrency)
 		if err != nil {
 			return nil, round + 1, err
 		}
@@ -332,9 +394,18 @@ func (p *Pipeline) buildDownloadTasks(rc *core.Context, items []extract.Item, ta
 	return tasks, nil
 }
 
-func (p *Pipeline) runDownload(rc *core.Context, tasks []*download.Task) ([]*download.Result, error) {
+func (p *Pipeline) runDownload(rc *core.Context, task *Task, tasks []*download.Task) ([]*download.Result, error) {
 	child := rc.Fork(uuid.NewString())
-	typed, err := p.downloader.Exec(child, tasks)
+	options := []download.Option{
+		download.WithDownloaders(p.downloader.Downloaders()...),
+		download.WithDefaults(task.toDownloadOpts()),
+		download.WithMaxConcurrency(task.Download.TaskConcurrency),
+	}
+	if task.Download.BestEffort {
+		options = append(options, download.WithFailStrategy(download.BatchBestEffort))
+	}
+	runner := download.NewStage(p.downloader.Name(), options...)
+	typed, err := runner.Exec(child, tasks)
 	if err != nil {
 		return nil, err
 	}
