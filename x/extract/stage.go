@@ -10,9 +10,31 @@ import (
 // Stage 通用解析 stage：
 // 注册多个 Extractor，运行时根据 URL 匹配对应 Parser，输出 []ParseItem
 type Stage struct {
+	*core.TypedStageAdapter[*Task, []ParseItem]
 	stageName  string
 	opts       stageOptions
 	extractors []Extractor
+}
+
+func (s *Stage) Exec(rc *core.Context, in *Task) (result core.TypedResult[[]ParseItem], err error) {
+	result.Next = s.opts.nextStageName
+
+	applyFallback(in, &s.opts.fallback)
+	parser := s.resolve(in.URL, in.ForcedParser)
+	if parser == nil {
+		err = fmt.Errorf("no parser matched URL: %s (forced: %s)", in.URL, in.ForcedParser)
+		return
+	}
+	items, err := parser.Parse(rc, in, in.Opts)
+	if err != nil {
+		return
+	}
+	if in.OnItems != nil {
+		in.OnItems(0, items)
+	}
+	result.Output = items
+
+	return
 }
 
 func NewStage(name string, options ...Option) *Stage {
@@ -20,6 +42,15 @@ func NewStage(name string, options ...Option) *Stage {
 	for _, opt := range options {
 		opt(&s.opts)
 	}
+	inputKey := "task"
+	outputKey := "items"
+	s.TypedStageAdapter = core.NewTypedStage[*Task, []ParseItem](
+		name,
+		inputKey,
+		outputKey,
+		s,
+	)
+
 	return s
 }
 
@@ -30,29 +61,6 @@ func (s *Stage) Mount(extractors ...Extractor) *Stage {
 }
 
 func (s *Stage) Name() string { return s.stageName }
-
-func (s *Stage) loadTask(rc *core.Context) (*Task, error) {
-
-	var task *Task
-	inputKey := s.opts.inputKey
-	if inputKey == "" {
-		inputKey = "task"
-	}
-
-	if val, ok := rc.State.Get(inputKey); ok {
-		if t, ok := val.(*Task); ok {
-			task = t
-		}
-	}
-
-	if task == nil {
-		return nil, fmt.Errorf("task not found: neither in rc.Inputs[\"%s\"] nor in stage default", inputKey)
-	}
-
-	applyFallback(task, &s.opts.fallback)
-	return task, nil
-
-}
 
 // applyFallback 将 fb 中的非零值填充到 task.Opts，header 仅补充不覆盖。
 func applyFallback(task *Task, fb *Opts) {
@@ -96,67 +104,6 @@ func (s *Stage) resolve(rawURL, forcedHint string) *Parser {
 		return nil
 	}
 	return candidates[0]
-}
-
-func (s *Stage) Run(rc *core.Context) core.StageResult {
-
-	task, err := s.loadTask(rc)
-	if err != nil {
-		return core.StageResult{
-			Status: core.StageFailed,
-			Err:    err,
-		}
-	}
-	maxRounds := task.MaxRounds
-	if maxRounds == 0 {
-		maxRounds = s.opts.maxRounds // Stage 级默认值
-	}
-	if maxRounds == 0 {
-		maxRounds = 1
-	}
-
-	var allDirect []ParseItem
-	queue := []string{task.URL}
-	for round := 0; round < maxRounds && len(queue) > 0; round++ {
-		var nextQueue []string
-
-		firstRoundForcedHint := ""
-		if round == 0 {
-			firstRoundForcedHint = task.ForcedParser
-		}
-
-		for _, rawURL := range queue {
-			parser := s.resolve(rawURL, firstRoundForcedHint)
-			if parser == nil {
-				return core.StageResult{Status: core.StageFailed, Err: fmt.Errorf("no parser matched URL: %s (forced: %s)", rawURL, task.ForcedParser)}
-			}
-
-			subTask := task.CloneWithURL(rawURL)
-			items, err := parser.Parse(rc, subTask, task.Opts)
-			if err != nil {
-				return core.StageResult{Status: core.StageFailed, Err: err}
-			}
-
-			if task.OnItems != nil {
-				task.OnItems(round, items)
-			}
-
-			for _, item := range items {
-				if item.IsDirect {
-					allDirect = append(allDirect, item)
-				} else {
-					nextQueue = append(nextQueue, item.URI) // 继续解析
-				}
-			}
-		}
-		queue = nextQueue
-	}
-
-	return core.StageResult{
-		Status:  core.StageSuccess,
-		Next:    s.opts.nextStageName,
-		Outputs: map[string]any{"items": allDirect},
-	}
 }
 
 // match 返回所有正则命中的 Parser，按 Priority 降序

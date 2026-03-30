@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	flowkit "github.com/KKKKKKKEM/flowkit"
+	"github.com/KKKKKKKEM/flowkit"
 	"github.com/KKKKKKKEM/flowkit/core"
 	"github.com/KKKKKKKEM/flowkit/pipeline"
 	"github.com/KKKKKKKEM/flowkit/x/download"
@@ -267,18 +267,18 @@ func (p *Pipeline) extractRound(
 			defer func() { <-sem }()
 
 			child := rc.Fork(uuid.NewString())
-			child.State.Set("task", &extract.Task{
+			typed, err := p.extractor.Exec(child, &extract.Task{
 				URL:          u,
 				Opts:         opts,
 				ForcedParser: forcedParser,
 			})
-			sr := p.extractor.Run(child)
-			if sr.IsFailed() {
-				results[idx] = result{err: sr.Err}
+			if err != nil {
+				results[idx] = result{err: err}
 				return
 			}
-			items, _ := sr.Outputs["items"].([]extract.ParseItem)
-			results[idx] = result{items: items}
+
+			results[idx] = result{items: typed.Output}
+
 		}(i, url)
 	}
 	wg.Wait()
