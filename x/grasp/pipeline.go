@@ -82,6 +82,16 @@ func (p *Pipeline) Serve(addr string, opts ...flowkit.ServeOption[*Task, *Report
 	return p.App.Serve(addr, opts...)
 }
 
+func (p *Pipeline) Launch(opts ...flowkit.LaunchOption[*Task, *Report]) error {
+	return p.App.Launch(append([]flowkit.LaunchOption[*Task, *Report]{
+		flowkit.WithLaunchCLIOptions[*Task, *Report](
+			flowkit.WithCLIBuilder[*Task, *Report](buildCLI),
+			flowkit.WithTrackerProvider[*Task, *Report](p.trackerProvider),
+			flowkit.WithInteractionPlugin[*Task, *Report](p.interactionPlugin),
+		),
+	}, opts...)...)
+}
+
 func (p *Pipeline) Run(rc *core.Context, _ string) (*core.Report, error) {
 	task, ok := core.GetState[*Task](rc, "task")
 	if !ok {

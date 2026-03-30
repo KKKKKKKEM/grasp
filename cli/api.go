@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 
@@ -17,8 +16,8 @@ func Func[Req, Resp any](fn func(*core.Context, Req) (Resp, error)) core.App[Req
 
 type Config[Req, Resp any] struct {
 	App               core.App[Req, Resp]
+	Args              []string
 	Builder           func(args []string) (Req, error)
-	Serve             func(addr string) error
 	OnResult          func(resp Resp)
 	OnError           func(err error)
 	TrackerProvider   core.TrackerProvider
@@ -26,6 +25,11 @@ type Config[Req, Resp any] struct {
 }
 
 func Run[Req, Resp any](cfg Config[Req, Resp]) error {
+	args := cfg.Args
+	if args == nil {
+		args = os.Args[1:]
+	}
+
 	onResult := cfg.OnResult
 	if onResult == nil {
 		onResult = func(resp Resp) {
@@ -43,17 +47,7 @@ func Run[Req, Resp any](cfg Config[Req, Resp]) error {
 		}
 	}
 
-	if cfg.Serve != nil {
-		fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-		addr := fs.String("serve", "", "")
-		fs.Usage = func() {}
-		_ = fs.Parse(os.Args[1:])
-		if *addr != "" {
-			return cfg.Serve(*addr)
-		}
-	}
-
-	req, err := cfg.Builder(os.Args[1:])
+	req, err := cfg.Builder(args)
 	if err != nil {
 		onError(fmt.Errorf("build request: %w", err))
 		return err
