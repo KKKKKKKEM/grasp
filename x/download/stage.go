@@ -73,9 +73,9 @@ func (s *DirectDownloadStage) loadTasks(rc *core.Context) ([]*Task, error) {
 		inputKey = "tasks"
 	}
 
-	val, ok := rc.Get(inputKey)
+	val, ok := rc.State.Get(inputKey)
 	if !ok {
-		return nil, fmt.Errorf("task not found in rc.Values[%q]", inputKey)
+		return nil, fmt.Errorf("task not found in rc.State[%q]", inputKey)
 	}
 
 	switch v := val.(type) {
@@ -84,7 +84,7 @@ func (s *DirectDownloadStage) loadTasks(rc *core.Context) ([]*Task, error) {
 	case *Task:
 		return []*Task{v}, nil
 	default:
-		return nil, fmt.Errorf("rc.Values[%q] must be *Task or []*Task, got %T", inputKey, val)
+		return nil, fmt.Errorf("rc.State[%q] must be *Task or []*Task, got %T", inputKey, val)
 	}
 }
 

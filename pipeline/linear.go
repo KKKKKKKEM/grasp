@@ -42,7 +42,7 @@ func (lp *LinearPipeline) Use(mw ...core.Middleware) *LinearPipeline {
 func (lp *LinearPipeline) Run(rc *core.Context, entry string) (*core.Report, error) {
 	report := &core.Report{
 		Mode:         core.ModeLinear,
-		TraceID:      rc.TraceID,
+		TraceID:      rc.Runtime.TraceID,
 		StageOrder:   []string{},
 		StageResults: make(map[string]core.StageResult),
 		DurationMs:   0,
@@ -84,7 +84,7 @@ func (lp *LinearPipeline) Run(rc *core.Context, entry string) (*core.Report, err
 		report.StageResults[stageName] = result
 
 		// 合并输出到共享状态
-		rc.Merge(result.Outputs)
+		rc.State.Merge(result.Outputs)
 
 		if result.IsFailed() {
 			report.Success = false

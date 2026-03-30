@@ -6,22 +6,78 @@ import (
 	"time"
 )
 
-type SharedState map[string]any
-
-type sharedValues struct {
+type SharedState struct {
 	mu   sync.RWMutex
-	data SharedState
+	data map[string]any
+}
+
+func NewSharedState() *SharedState {
+	return &SharedState{data: make(map[string]any)}
+}
+
+func (s *SharedState) Set(key string, val any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data[key] = val
+}
+
+func (s *SharedState) Get(key string) (any, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	v, ok := s.data[key]
+	return v, ok
+}
+
+func (s *SharedState) Merge(values map[string]any) {
+	if len(values) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k, v := range values {
+		s.data[k] = v
+	}
+}
+
+type Runtime struct {
+	TraceID           string
+	StartedAt         time.Time
+	Tags              map[string]string
+	InteractionPlugin InteractionPlugin
+	TrackerProvider   TrackerProvider
+}
+
+func newRuntime(traceID string) *Runtime {
+	return &Runtime{
+		TraceID:   traceID,
+		StartedAt: time.Now(),
+		Tags:      make(map[string]string),
+	}
+}
+
+func (r *Runtime) Clone() *Runtime {
+	if r == nil {
+		return newRuntime("")
+	}
+	tags := make(map[string]string, len(r.Tags))
+	for k, v := range r.Tags {
+		tags[k] = v
+	}
+	return &Runtime{
+		TraceID:           r.TraceID,
+		StartedAt:         r.StartedAt,
+		Tags:              tags,
+		InteractionPlugin: r.InteractionPlugin,
+		TrackerProvider:   r.TrackerProvider,
+	}
 }
 
 // Context 实现 context.Context 接口，同时承载业务数据
 // 这是整个框架的核心上下文对象，所有 Stage 通过它进行数据共享与信号传递
 type Context struct {
-	ctx       context.Context
-	TraceID   string
-	StartedAt time.Time
-
-	state *sharedValues
-	Tags  map[string]string
+	ctx     context.Context
+	State   *SharedState
+	Runtime *Runtime
 }
 
 func (rc *Context) Deadline() (deadline time.Time, ok bool) {
@@ -39,7 +95,7 @@ func (rc *Context) Err() error {
 // Value 先查业务 Values，再落回到底层 context
 func (rc *Context) Value(key interface{}) interface{} {
 	if k, ok := key.(string); ok {
-		if v, exist := rc.Get(k); exist {
+		if v, exist := rc.State.Get(k); exist {
 			return v
 		}
 	}
@@ -52,11 +108,9 @@ func NewContext(ctx context.Context, traceID string) *Context {
 		ctx = context.Background()
 	}
 	return &Context{
-		ctx:       ctx,
-		TraceID:   traceID,
-		state:     &sharedValues{data: make(SharedState)},
-		Tags:      make(map[string]string),
-		StartedAt: time.Now(),
+		ctx:     ctx,
+		State:   NewSharedState(),
+		Runtime: newRuntime(traceID),
 	}
 }
 
@@ -65,11 +119,9 @@ func (rc *Context) WithContext(ctx context.Context) *Context {
 		ctx = context.Background()
 	}
 	return &Context{
-		ctx:       ctx,
-		TraceID:   rc.TraceID,
-		state:     rc.state,
-		Tags:      rc.Tags,
-		StartedAt: rc.StartedAt,
+		ctx:     ctx,
+		State:   rc.State,
+		Runtime: rc.Runtime,
 	}
 }
 
@@ -85,58 +137,29 @@ func (rc *Context) WithCancel() (*Context, context.CancelFunc) {
 	return rc.WithContext(ctx), cancel
 }
 
-// WithValue 返回一个新的包含值的 Context
-func (rc *Context) WithValue(key string, val any) *Context {
-	rc.Set(key, val)
-	return rc
-}
-
-func (rc *Context) Set(key string, val any) {
-	rc.state.mu.Lock()
-	defer rc.state.mu.Unlock()
-	rc.state.data[key] = val
-}
-
-func (rc *Context) Get(key string) (any, bool) {
-	rc.state.mu.RLock()
-	defer rc.state.mu.RUnlock()
-	v, ok := rc.state.data[key]
-	return v, ok
-}
-
-func (rc *Context) Merge(values map[string]any) {
-	if len(values) == 0 {
-		return
-	}
-	rc.state.mu.Lock()
-	defer rc.state.mu.Unlock()
-	for k, v := range values {
-		rc.state.data[k] = v
-	}
-}
-
 func (rc *Context) Fork(traceID string) *Context {
 	if traceID == "" {
-		traceID = rc.TraceID
+		traceID = rc.Runtime.TraceID
 	}
+	runtime := rc.Runtime.Clone()
+	runtime.TraceID = traceID
 	return &Context{
-		ctx:       rc,
-		TraceID:   traceID,
-		state:     &sharedValues{data: make(SharedState)},
-		Tags:      make(map[string]string),
-		StartedAt: rc.StartedAt,
+		ctx:     rc,
+		State:   NewSharedState(),
+		Runtime: runtime,
 	}
 }
 
 func (rc *Context) Derive(traceID string) *Context {
 	child := rc.WithContext(rc)
 	if traceID != "" {
-		child.TraceID = traceID
+		child.Runtime = rc.Runtime.Clone()
+		child.Runtime.TraceID = traceID
 	}
 	return child
 }
 
 // Duration 返回从启动到现在的耗时
 func (rc *Context) Duration() time.Duration {
-	return time.Since(rc.StartedAt)
+	return time.Since(rc.Runtime.StartedAt)
 }

@@ -61,10 +61,10 @@ func Run[Req, Resp any](cfg Config[Req, Resp]) error {
 
 	rc := core.NewContext(context.Background(), uuid.NewString())
 	if cfg.TrackerProvider != nil {
-		rc.WithTrackerProvider(cfg.TrackerProvider)
+		rc.Runtime.TrackerProvider = cfg.TrackerProvider
 	}
 	if cfg.InteractionPlugin != nil {
-		rc.WithInteractionPlugin(cfg.InteractionPlugin)
+		rc.Runtime.InteractionPlugin = cfg.InteractionPlugin
 	}
 
 	resp, err := cfg.App.Invoke(rc, req)

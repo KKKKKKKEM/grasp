@@ -69,16 +69,16 @@ func (p *Pipeline) Serve(addr string, opts ...flowkit.ServeOption[*Task, *Report
 func (p *Pipeline) Run(rc *core.Context, _ string) (*core.Report, error) {
 	report := &core.Report{
 		Mode:         core.ModeLinear,
-		TraceID:      rc.TraceID,
+		TraceID:      rc.Runtime.TraceID,
 		StageOrder:   []string{"grasp"},
 		StageResults: make(map[string]core.StageResult),
 	}
 	start := time.Now()
 
-	v, ok := rc.Get("task")
+	v, ok := rc.State.Get("task")
 	task, ok := v.(*Task)
 	if !ok {
-		return fail(report, start, fmt.Errorf("rc.Values[\"task\"] missing or wrong type"))
+		return fail(report, start, fmt.Errorf("rc.State[\"task\"] missing or wrong type"))
 	}
 
 	graspReport, err := p.run(rc, task)
@@ -96,7 +96,7 @@ func (p *Pipeline) Run(rc *core.Context, _ string) (*core.Report, error) {
 }
 
 func (p *Pipeline) Invoke(rc *core.Context, task *Task) (*Report, error) {
-	rc.Set("task", task)
+	rc.State.Set("task", task)
 	runReport, err := p.Run(rc, "grasp")
 	if err != nil {
 		return nil, err
@@ -156,7 +156,7 @@ func (p *Pipeline) selectItems(rc *core.Context, task *Task, items []extract.Par
 	}
 
 	i := core.Interaction{Type: core.InteractionTypeSelect, Payload: items, Message: "Please select items to download"}
-	interactionPlugin := rc.InteractionPlugin()
+	interactionPlugin := rc.Runtime.InteractionPlugin
 	if interactionPlugin == nil {
 		interactionPlugin = p.interactionPlugin
 	}
@@ -267,7 +267,7 @@ func (p *Pipeline) extractRound(
 			defer func() { <-sem }()
 
 			child := rc.Fork(uuid.NewString())
-			child.Set("task", &extract.Task{
+			child.State.Set("task", &extract.Task{
 				URL:          u,
 				Opts:         opts,
 				ForcedParser: forcedParser,
@@ -302,7 +302,7 @@ func (p *Pipeline) buildDownloadTasks(rc *core.Context, items []extract.ParseIte
 	transformFn := task.resolveTransform(p.defaultTransform)
 	baseOpts := task.toDownloadOpts()
 
-	trackerBuilder := rc.TrackerProvider()
+	trackerBuilder := rc.Runtime.TrackerProvider
 	if trackerBuilder == nil {
 		trackerBuilder = p.trackerProvider
 	}
@@ -328,7 +328,7 @@ func (p *Pipeline) buildDownloadTasks(rc *core.Context, items []extract.ParseIte
 
 func (p *Pipeline) runDownload(rc *core.Context, tasks []*download.Task) ([]*download.Result, error) {
 	child := rc.Fork(uuid.NewString())
-	child.Set("tasks", tasks)
+	child.State.Set("tasks", tasks)
 
 	sr := p.downloader.Run(child)
 	if sr.IsFailed() {
