@@ -112,6 +112,29 @@ app.CLI(
 )
 ```
 
+#### 追加自定义 flag
+
+`WithCLIAutoFlags` 接受可选的 `func(*flag.FlagSet)` 回调，用于在同一个 `FlagSet` 上追加 struct 以外的 flag。回调在所有 struct tag 绑定完成后、`Parse` 执行前调用。
+
+```go
+var dryRun bool
+var output string
+
+app.Launch(
+    flowkit.WithLaunchCLIOptions(
+        flowkit.WithCLIAutoFlags[*Req, *Resp](
+            func(fs *flag.FlagSet) {
+                fs.BoolVar(&dryRun, "dry-run", false, "print actions without executing")
+                fs.StringVar(&output, "output", "json", "output format: json|text")
+            },
+        ),
+    ),
+)
+// Parse 完成后 dryRun / output 已被填充，可在后续逻辑中直接读取（闭包捕获）
+```
+
+> 自定义 flag 的值通过闭包捕获，游离在 `Req` 结构体之外。若希望值随 `Req` 一起传递，建议在 `Req` 中添加对应字段并用 cli tag 声明。
+
 Flag 名称解析优先级：**cli tag > json tag > 小写字段名**。  
 若字段无 `cli` tag 但有 `json` tag，自动用 json 名作为 flag 名（忽略 `omitempty`；`json:"-"` 视为跳过）。
 
@@ -155,7 +178,7 @@ type Req struct {
 
 ### 帮助输出
 
-使用 AutoFlags 时，`-h` / `--help` flag 以及 `help` 子命令均会打印完整 flag 列表后正常退出（exit 0）：
+使用 AutoFlags 时，`-h` / `--help` flag 以及 `help` 子命令均会打印完整 flag 列表（含自定义 flag）后正常退出（exit 0）：
 
 ```bash
 ./app -h
@@ -187,7 +210,7 @@ app.Serve(":8080",
 | Option | 说明 |
 |--------|------|
 | `WithCLIBuilder(fn)` | 手动 Builder，优先级高于 AutoFlags |
-| `WithCLIAutoFlags()` | struct tag 自动解析 flag |
+| `WithCLIAutoFlags(extra...)` | struct tag 自动解析 flag；可选传入 `func(*flag.FlagSet)` 追加自定义 flag |
 | `WithCLIArgs(args)` | 覆盖默认 `os.Args[1:]` |
 | `WithTrackerProvider(tp)` | 注入进度追踪器 |
 | `WithInteractionPlugin(ip)` | 注入交互插件 |

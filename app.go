@@ -56,6 +56,7 @@ type cliConfig[Req, Resp any] struct {
 	args              []string
 	builder           func([]string) (Req, error)
 	autoFlags         bool
+	extraFlags        []func(*flag.FlagSet)
 	trackerProvider   core.TrackerProvider
 	interactionPlugin core.InteractionPlugin
 	onResult          func(Resp)
@@ -72,8 +73,11 @@ func WithCLIArgs[Req, Resp any](args []string) CLIOption[Req, Resp] {
 	return func(c *cliConfig[Req, Resp]) { c.args = args }
 }
 
-func WithCLIAutoFlags[Req, Resp any]() CLIOption[Req, Resp] {
-	return func(c *cliConfig[Req, Resp]) { c.autoFlags = true }
+func WithCLIAutoFlags[Req, Resp any](extra ...func(*flag.FlagSet)) CLIOption[Req, Resp] {
+	return func(c *cliConfig[Req, Resp]) {
+		c.autoFlags = true
+		c.extraFlags = append(c.extraFlags, extra...)
+	}
 }
 
 func WithTrackerProvider[Req, Resp any](tp core.TrackerProvider) CLIOption[Req, Resp] {
@@ -219,6 +223,7 @@ func (a *App[Req, Resp]) CLI(opts ...CLIOption[Req, Resp]) error {
 		Args:              cfg.args,
 		Builder:           cfg.builder,
 		AutoFlags:         cfg.autoFlags,
+		ExtraFlags:        cfg.extraFlags,
 		TrackerProvider:   cfg.trackerProvider,
 		InteractionPlugin: cfg.interactionPlugin,
 		OnResult:          cfg.onResult,
@@ -292,6 +297,7 @@ func (a *App[Req, Resp]) Launch(opts ...LaunchOption[Req, Resp]) error {
 			Args:              plan.Args,
 			Builder:           cfg.cli.builder,
 			AutoFlags:         cfg.cli.autoFlags,
+			ExtraFlags:        cfg.cli.extraFlags,
 			TrackerProvider:   cfg.cli.trackerProvider,
 			InteractionPlugin: cfg.cli.interactionPlugin,
 			OnResult:          cfg.cli.onResult,

@@ -51,20 +51,20 @@ func BuildFlagSet[Req any](name string) (*flag.FlagSet, error) {
 // map：flag 可重复传，-flag k=v -flag k2=v2；value 按目标类型解析。
 //
 // 嵌套结构体：父字段 tag 名作为前缀，子 flag 用 "." 拼接，如 -download.dest。
-func ParseFlags[Req any](args []string) (Req, error) {
+func ParseFlags[Req any](args []string, extra ...func(*flag.FlagSet)) (Req, error) {
 	var zero Req
-	return parseFlags[Req](args, reflect.ValueOf(&zero).Elem())
+	return parseFlags[Req](args, reflect.ValueOf(&zero).Elem(), extra...)
 }
 
 // ParseFlagsPtr 与 ParseFlags 相同，但 Req 本身是指针类型（如 *MyReq）。
-func ParseFlagsPtr[Req any](args []string) (Req, error) {
+func ParseFlagsPtr[Req any](args []string, extra ...func(*flag.FlagSet)) (Req, error) {
 	var zero Req
 	rv := reflect.ValueOf(&zero).Elem()
 	if rv.Kind() == reflect.Ptr {
 		rv.Set(reflect.New(rv.Type().Elem()))
-		return parseFlags[Req](args, rv.Elem())
+		return parseFlags[Req](args, rv.Elem(), extra...)
 	}
-	return parseFlags[Req](args, rv)
+	return parseFlags[Req](args, rv, extra...)
 }
 
 type fieldMeta struct {
@@ -76,7 +76,7 @@ type fieldMeta struct {
 	value      reflect.Value
 }
 
-func parseFlags[Req any](args []string, rv reflect.Value) (Req, error) {
+func parseFlags[Req any](args []string, rv reflect.Value, extra ...func(*flag.FlagSet)) (Req, error) {
 	var zero Req
 
 	if rv.Kind() != reflect.Struct {
@@ -88,6 +88,10 @@ func parseFlags[Req any](args []string, rv reflect.Value) (Req, error) {
 	fields, err := collectFields(fs, rv, "")
 	if err != nil {
 		return zero, err
+	}
+
+	for _, fn := range extra {
+		fn(fs)
 	}
 
 	if err := fs.Parse(args); err != nil {

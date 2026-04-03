@@ -21,6 +21,7 @@ type Config[Req, Resp any] struct {
 	Args              []string
 	Builder           func(args []string) (Req, error)
 	AutoFlags         bool
+	ExtraFlags        []func(*flag.FlagSet)
 	OnResult          func(resp Resp)
 	OnError           func(err error)
 	TrackerProvider   core.TrackerProvider
@@ -57,7 +58,7 @@ func Run[Req, Resp any](cfg Config[Req, Resp]) error {
 	case cfg.Builder != nil:
 		req, err = cfg.Builder(args)
 	case cfg.AutoFlags:
-		req, err = ParseFlagsPtr[Req](args)
+		req, err = ParseFlagsPtr[Req](args, cfg.ExtraFlags...)
 		if errors.Is(err, flag.ErrHelp) {
 			os.Exit(0)
 		}
